@@ -1,0 +1,34 @@
+@startuml
+title DeepResearch Research Sequence Diagram
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Microsoft YaHei
+
+actor User
+participant Frontend
+participant Orchestrator
+participant Planner
+participant McpClient
+participant "MCP Server" as MCP
+participant "Backend V2" as Backend
+
+User -> Frontend : input question and identifiers
+Frontend -> Orchestrator : POST /api/research/run
+Orchestrator -> Planner : createPlannedResearch()
+Planner --> Orchestrator : return plan
+Orchestrator -> McpClient : connect(mcpUrl)
+McpClient --> Orchestrator : connection ready
+
+loop execute planned steps
+  Orchestrator -> McpClient : callTool(toolName, args)
+  McpClient -> MCP : MCP tool call
+  MCP -> Backend : REST request
+  Backend --> MCP : structured result
+  MCP --> McpClient : tool result
+  McpClient --> Orchestrator : execution output
+end
+
+Orchestrator -> Orchestrator : buildResearchReport()
+Orchestrator --> Frontend : structured report / markdown
+Frontend --> User : show timeline and report
+@enduml

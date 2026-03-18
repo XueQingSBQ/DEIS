@@ -1,0 +1,5 @@
+dris:
+  v2:
+    storage-secret-id: test-secret-id
+    storage-secret-key: test-secret-key
+    storage-session-token: ""

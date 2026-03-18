@@ -1,0 +1,154 @@
+﻿server:
+  port: 8190
+
+spring:
+  application:
+    name: dris-enterprise-backend-v2
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/dris_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: sbq254172
+    hikari:
+      minimum-idle: 8
+      maximum-pool-size: 16
+      connection-timeout: 5000
+      validation-timeout: 2000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  sql:
+    init:
+      mode: always
+      continue-on-error: true
+      encoding: UTF-8
+      schema-locations:
+        - classpath:sql/mysql/schema.sql
+        - classpath:sql/mysql/extension_schema.sql
+
+dris:
+  v2:
+    node-id: node-local
+    node-level: COUNTRY
+    mode: jdbc
+    region-code: 1100
+    organization-code: ABCD
+    drirp-enabled: true
+    drirp-port: 19090
+    drirp-public-url: grpc://127.0.0.1:19090
+    drirp-security:
+      enabled: false
+      mode: enforce
+      require-response-auth: true
+      shared-secret: ""
+      key-id: node-local
+      max-skew-ms: 300000
+      nonce-ttl-ms: 300000
+      replay-max-entries: 100000
+      allow-anonymous: false
+      audit-enabled: true
+    drirp-outbound-client-pool:
+      max-entries: 64
+      max-idle-ms: 600000
+      cleanup-interval-ms: 30000
+    topology-health:
+      enabled: true
+      initial-delay-ms: 5000
+      interval-ms: 15000
+      timeout-ms: 3000
+      offline-threshold-ms: 45000
+      offline-failure-threshold: 3
+      startup-hello-max-attempts: 3
+      startup-hello-retry-interval-ms: 2000
+      probe-children-enabled: true
+      notify-on-shutdown: true
+    business-audit:
+      enabled: true
+      async-enabled: true
+      core-pool-size: 1
+      max-pool-size: 2
+      queue-capacity: 2000
+      keep-alive-seconds: 60
+    parent-node-id: ""
+    parent-drirp-url: ""
+    parent-region-code: ""
+    parent-organization-code: ""
+    startup-hello-enabled: true
+    strict-industry-validation: false
+    allow-component-type-replace: false
+    require-tool-spec: false
+    require-tool-sha256: false
+    resolve-mode: recursive
+    resolve-max-hops: 8
+    resolve-timeout-ms: 5000
+    resolve-allow-parent-fallback: true
+    search-cache-enabled: true
+    search-cache-ttl-ms: 30000
+    search-cache-max-entries: 1000
+    search-rate-limit-enabled: true
+    search-rate-limit-qps: 100
+    search-rate-limit-burst: 200
+    search-circuit-breaker-enabled: true
+    search-circuit-failure-threshold: 10
+    search-circuit-open-ms: 10000
+    search-circuit-half-open-permits: 1
+    vector-auto-sync-enabled: true
+    vector-auto-sync-initial-delay-ms: 5000
+    vector-auto-sync-interval-ms: 30000
+    kernel-read-cache:
+      enabled: true
+      ttl-ms: 15000
+      max-entries: 2000
+    resolve-executor:
+      core-pool-size: 2
+      max-pool-size: 8
+      queue-capacity: 200
+      keep-alive-seconds: 60
+      rejection-policy: caller_runs
+    search-executor:
+      core-pool-size: 2
+      max-pool-size: 8
+      queue-capacity: 200
+      keep-alive-seconds: 60
+      rejection-policy: caller_runs
+    vector-sync-executor:
+      core-pool-size: 1
+      max-pool-size: 1
+      queue-capacity: 1
+      keep-alive-seconds: 60
+      rejection-policy: abort
+    vector-engine: ann_lsh
+    vector-server-url: ""
+    vector-collection: dris_metadata
+    vector-tenant: default_tenant
+    vector-database: default_database
+    vector-request-timeout-ms: 5000
+    vector-server-api-key: ""
+    vector-server-api-key-header: X-Chroma-Token
+    embedding-provider: hash_local
+    embedding-dimensions: 128
+    embedding-api-base-url: ""
+    embedding-model: ""
+    embedding-request-timeout-ms: 5000
+    embedding-api-key: ""
+    embedding-api-key-header: Authorization
+    storage-provider: cos
+    storage-region: ap-beijing
+    storage-endpoint: https://cos.ap-beijing.myqcloud.com
+    default-bucket: dris-repo-prod-1330585503
+    storage-public-base-url: ""
+    storage-secret-id: "AKIDzqWzEGI8lkbHo9IF5lVCl8Wq10mTAf4N"
+    storage-secret-key: "PgnjXCfv1vd8SbXTyHMJ6hiaGj04ye6L"
+    storage-session-token: ""
+
+    auth:
+      api-auth-required: false
+      write-permission-enabled: true
+      issuer: auth-center
+      audience: dris-business-node
+      auth-center-base-url: http://127.0.0.1:8290
+      public-key-pem: ""
+      public-key-refresh-ms: 300000
+
+
+
+

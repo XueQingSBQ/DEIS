@@ -1,0 +1,39 @@
+{
+  "generatedAt": "2026-03-11T11:45:54.172414+00:00",
+  "recordCount": 360,
+  "nodeDistribution": {
+    "CNTA": 180,
+    "CNTB": 180
+  },
+  "queryDistribution": {
+    "transportation": 60,
+    "energy": 60,
+    "climate": 60,
+    "agriculture": 60,
+    "health": 60,
+    "education": 60
+  },
+  "topFormats": {
+    "csv": 131,
+    "html": 60,
+    "xls": 42,
+    "link": 38,
+    "pdf": 35,
+    "zip": 12,
+    "xml": 10,
+    "api": 8,
+    "cfm": 5,
+    "text": 5,
+    "json": 2,
+    "zipped csv": 2,
+    "arcgis geoservices rest api": 1,
+    "text/tab": 1,
+    "doc": 1
+  },
+  "entityTypes": {
+    "dataset": 360
+  },
+  "sourcePortal": "catalog.data.gov",
+  "sourceApiBase": "https://catalog.data.gov/api/3/action/package_search",
+  "description": "Official open data metadata from Data.gov transformed into DRIS registration + external resource bindings."
+}

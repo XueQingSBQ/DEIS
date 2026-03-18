@@ -1,0 +1,48 @@
+﻿{
+    "generatedAt":  "2026-03-11T11:45:54.172414+00:00",
+    "sourcePortal":  "catalog.data.gov",
+    "sourceApiBase":  "https://catalog.data.gov/api/3/action/package_search",
+    "queries":  [
+                    {
+                        "query":  "transportation",
+                        "industry":  "道路运输业",
+                        "applicationScenario":  "cross-node transport data sharing",
+                        "ownerFallback":  "transport-open-data"
+                    },
+                    {
+                        "query":  "energy",
+                        "industry":  "电力、热力生产和供应业",
+                        "applicationScenario":  "energy data sharing and comparison",
+                        "ownerFallback":  "energy-open-data"
+                    },
+                    {
+                        "query":  "climate",
+                        "industry":  "生态保护和环境治理业",
+                        "applicationScenario":  "climate observation and monitoring",
+                        "ownerFallback":  "climate-open-data"
+                    },
+                    {
+                        "query":  "agriculture",
+                        "industry":  "农业",
+                        "applicationScenario":  "agriculture production and monitoring",
+                        "ownerFallback":  "agriculture-open-data"
+                    },
+                    {
+                        "query":  "health",
+                        "industry":  "卫生",
+                        "applicationScenario":  "public health data governance",
+                        "ownerFallback":  "health-open-data"
+                    },
+                    {
+                        "query":  "education",
+                        "industry":  "教育",
+                        "applicationScenario":  "education resource discovery",
+                        "ownerFallback":  "education-open-data"
+                    }
+                ],
+    "notes":  [
+                  "Data.gov CKAN API returns metadata and resource URLs, not the dataset contents.",
+                  "This corpus keeps the external resource URL as DRIS component locator.",
+                  "Every record carries a stable _idempotencyKey based on the source dataset id."
+              ]
+}

@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package drirp;
+
+option java_package = "org.bdware.drirp.grpc";
+option java_outer_classname = "DrirpProto";
+
+message DrirpMessage {
+  int32 code = 1;
+  string rid = 2;
+  string msg = 3;
+  string body = 4;
+  int64 ts = 5;
+  string auth = 6;
+  bool ok = 7;
+  string errorCode = 8;
+  string errorMessage = 9;
+  repeated string details = 10;
+  string version = 11;
+  string traceId = 12;
+  string nonce = 13;
+  string idempotencyKey = 14;
+}
+
+service DrirpService {
+  rpc Call(DrirpMessage) returns (DrirpMessage);
+}

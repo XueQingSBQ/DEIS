@@ -1,0 +1,37 @@
+@startuml
+title DRIS系统总体组件图
+skinparam backgroundColor white
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam defaultFontName Microsoft YaHei
+
+actor "用户/答辩教师" as User
+rectangle "DRIS Frontend\nVue3 + Vite" as Frontend
+rectangle "DeepResearch Orchestrator\nPlanner + Executor + Report" as Orchestrator
+rectangle "DRIS MCP Server\nMCP Tools / Resources / Prompts" as Mcp
+rectangle "Enterprise Backend V2\nSpring Boot REST API" as Backend
+rectangle "Auth Center\nJWT / OAuth-like Token" as Auth
+rectangle "DRIS Java SDK Next\nIdentifier Kernel" as Sdk
+rectangle "DRIRP Java SDK\nProtocol / Transport / Auth" as Drirp
+database "MySQL / Object Storage\n业务数据与资源" as DataStore
+
+User --> Frontend : 页面访问/研究请求
+Frontend --> Orchestrator : /api/research/run\n/api/research/stream
+Frontend --> Auth : register/login/userinfo
+Orchestrator --> Mcp : MCP Streamable HTTP
+Mcp --> Backend : REST调用
+Backend --> Auth : 公钥获取/Token校验
+Backend --> Sdk : 标识内核调用
+Backend --> Drirp : 协议/分布式调用
+Backend --> DataStore : 元数据/审计/资源
+
+note right of Mcp
+  统一暴露工具:
+  resolve/search/audit/routes
+end note
+
+note right of Orchestrator
+  研究流程:
+  规划 -> 工具调用 -> 报告生成
+end note
+@enduml

@@ -1,0 +1,34 @@
+﻿# local IDE
+.idea/
+
+# java / maven / gradle outputs
+**/target/
+**/build/
+**/.gradle/
+
+# node outputs
+**/node_modules/
+**/dist/
+
+# runtime and generated artifacts
+**/run.out.log
+**/run.err.log
+**/*.log
+**/tests/output/
+**/runtime/pids/
+**/import-results/
+**/tmp-stream-payload.json
+**/cos-e2e-*.json
+**/put-*.txt
+
+# env / secrets
+**/.env
+
+# misc system files
+**/.DS_Store
+**/Thumbs.db
+
+# packaged binaries
+**/*.jar
+**/*.war
+**/*.exe

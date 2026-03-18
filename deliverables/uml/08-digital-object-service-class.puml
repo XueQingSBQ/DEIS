@@ -1,0 +1,75 @@
+@startuml
+title 数字对象服务关系类图
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Microsoft YaHei
+skinparam classAttributeIconSize 0
+
+interface IdentifierApplicationService {
+  +register(request)
+  +validate(identifier)
+  +exists(identifier)
+  +parse(identifier)
+  +getDigitalObject(identifier)
+  +delete(request)
+}
+
+interface MetadataApplicationService {
+  +get(identifier)
+  +getBatch(identifiers)
+  +update(request)
+  +patch(request)
+}
+
+interface ResourceApplicationService {
+  +get(identifier)
+  +getBatch(identifiers)
+  +bind(request)
+  +remove(request)
+}
+
+class DefaultIdentifierApplicationService
+class DefaultMetadataApplicationService
+class DefaultResourceApplicationService
+class IdentifierRules
+
+interface DigitalObjectRepository {
+  +findByIdentifier(identifier)
+  +existsByIdentifier(identifier)
+  +insert(object)
+  +update(object, expectedRevision)
+}
+
+class DigitalObject
+class IdentifierMetadata
+class Resource
+
+IdentifierApplicationService <|.. DefaultIdentifierApplicationService
+MetadataApplicationService <|.. DefaultMetadataApplicationService
+ResourceApplicationService <|.. DefaultResourceApplicationService
+
+DefaultIdentifierApplicationService --> DigitalObjectRepository
+DefaultMetadataApplicationService --> DigitalObjectRepository
+DefaultResourceApplicationService --> DigitalObjectRepository
+
+DefaultIdentifierApplicationService ..> IdentifierRules : 生成/校验标识
+DefaultMetadataApplicationService ..> IdentifierRules : 一致性校验
+
+IdentifierApplicationService ..> DigitalObject : 创建/查询/删除
+MetadataApplicationService ..> IdentifierMetadata : 读取/更新
+ResourceApplicationService ..> Resource : 绑定/移除
+
+note right of DefaultIdentifierApplicationService
+  负责数字对象的创建入口：
+  注册标识、解析对象、删除对象
+end note
+
+note right of DefaultMetadataApplicationService
+  负责元数据维护：
+  全量更新与局部Patch
+end note
+
+note right of DefaultResourceApplicationService
+  负责资源组件绑定与解绑
+end note
+@enduml

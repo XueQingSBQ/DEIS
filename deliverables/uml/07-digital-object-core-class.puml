@@ -1,0 +1,101 @@
+@startuml
+title 数字对象核心设计类图
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Microsoft YaHei
+skinparam classAttributeIconSize 0
+top to bottom direction
+skinparam nodesep 40
+skinparam ranksep 45
+
+enum ObjectStatus {
+  ACTIVE
+  DELETED
+  UNKNOWN
+}
+
+class DigitalObject {
+  -identifier: String
+  -status: ObjectStatus
+  -revision: long
+  --
+  +validateInvariants()
+  +copy()
+}
+
+class IdentifierCode <<标识>> {
+  -regionCode: String
+  -organizationCode: String
+  -industryCode: String
+  -dataCategoryCode: String
+  -registrationTypeCode: String
+  -date: String
+  -credential: String
+  --
+  +compact()
+}
+
+class IdentifierMetadata <<元数据>> {
+  -identifier: String
+  -owner: String
+  -name: String
+  -description: String
+  -applicationScenario: String
+  -entityType: String
+  -additionalAttributes: Map<String,Object>
+  --
+  +validateForUpdate()
+  +copy()
+}
+
+class Resource <<资源>> {
+  -componentType: String
+  -storageType: String
+  -accessMethod: String
+  -contentType: String
+  -format: String
+  -locator: String
+  -size: long
+  -hashValue: String
+  --
+  +validate()
+  +copy()
+}
+
+class ResourceVersion <<资源版本>> {
+  -versionNo: long
+  -providerVersionId: String
+  -sourceUploadId: String
+  -verifyStatus: String
+  -createdAt: String
+  --
+  +copy()
+}
+
+DigitalObject -[hidden]down- IdentifierCode
+IdentifierCode -[hidden]right- IdentifierMetadata
+IdentifierMetadata -[hidden]right- Resource
+
+DigitalObject *-- "1" IdentifierCode : 标识
+DigitalObject *-- "1" IdentifierMetadata : 元数据
+DigitalObject *-- "0..1" Resource : 资源
+DigitalObject --> ObjectStatus
+ResourceVersion ..> Resource : 版本快照
+
+note right of DigitalObject
+  数字对象是系统核心聚合根，
+  统一组织标识、元数据和资源信息
+end note
+
+note bottom of IdentifierCode
+  表示对象的唯一标识编码
+end note
+
+note bottom of IdentifierMetadata
+  描述对象的业务语义与属性
+end note
+
+note bottom of Resource
+  描述对象关联的实际资源入口
+end note
+@enduml

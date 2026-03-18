@@ -1,0 +1,65 @@
+@startuml
+title Enterprise Backend V2 核心类图
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Microsoft YaHei
+skinparam classAttributeIconSize 0
+
+class IdentifierCoreController {
+  +register(request)
+  +metadata(identifier)
+  +registerBatch(requests)
+  +validate(identifier)
+  +exists(identifier)
+  +resolveBatch(identifiers)
+  +resolveBatchDistributed(identifiers)
+  +resolveObjectBatchDistributed(identifiers)
+  +object(identifier)
+  +updateMetadata(identifier, metadata)
+  +patchMetadata(identifier, fields)
+  +delete(identifier)
+}
+
+class IdentifierResourceController
+class IdentifierUploadController
+class SearchController
+class NodeTopologyController
+class SystemOpsController
+
+class IdentifierCoreService
+class IdentifierResourceService
+class IdentifierUploadService
+class FederatedSearchService
+class NodeTopologyService
+class SystemOpsService
+class DrirpResolutionService
+class DrirpSearchService
+class IdentifierBusinessAuditService
+class IdentifierPermissionService
+class AuthCenterPublicKeyService
+class JwtAuthTokenService
+
+interface DrisSdk
+
+IdentifierCoreController --> IdentifierCoreService
+IdentifierResourceController --> IdentifierResourceService
+IdentifierUploadController --> IdentifierUploadService
+SearchController --> FederatedSearchService
+NodeTopologyController --> NodeTopologyService
+SystemOpsController --> SystemOpsService
+
+IdentifierCoreService --> DrisSdk
+IdentifierCoreService --> DrirpResolutionService
+IdentifierCoreService --> IdentifierBusinessAuditService
+IdentifierCoreService --> IdentifierPermissionService
+
+IdentifierResourceService --> DrisSdk
+IdentifierResourceService --> IdentifierBusinessAuditService
+IdentifierUploadService --> IdentifierBusinessAuditService
+
+FederatedSearchService --> DrirpSearchService
+FederatedSearchService --> IdentifierPermissionService
+
+IdentifierPermissionService --> JwtAuthTokenService
+JwtAuthTokenService --> AuthCenterPublicKeyService
+@enduml

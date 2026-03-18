@@ -1,0 +1,43 @@
+@startuml
+title DRIS本地联调部署图
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Microsoft YaHei
+
+node "浏览器" as Browser
+node "Frontend\n5176" as Frontend
+node "Orchestrator\n38083" as Orchestrator
+node "MCP Server\n38082" as Mcp
+node "Auth Center\n8290" as Auth
+
+node "Backend Cluster" as Cluster {
+  node "Node1 8200" as N1
+  node "Node2 8201" as N2
+  node "Node3 8202" as N3
+  node "Node4 8203" as N4
+  node "Node5 8204" as N5
+  node "Node6 8205" as N6
+}
+
+database "MySQL" as DB
+cloud "Object Storage" as OSS
+
+Browser --> Frontend
+Frontend --> Orchestrator
+Frontend --> Auth
+Orchestrator --> Mcp
+Mcp --> N1
+N1 --> N2
+N1 --> N3
+N1 --> N4
+N1 --> N5
+N1 --> N6
+N1 --> DB
+N2 --> DB
+N3 --> DB
+N4 --> DB
+N5 --> DB
+N6 --> DB
+N1 --> OSS
+Auth --> DB
+@enduml

@@ -1,0 +1,29 @@
+﻿server:
+  port: 8290
+
+spring:
+  application:
+    name: dris-auth-center
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/dris_auth?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: sbq254172
+    hikari:
+      maximum-pool-size: 5
+      connection-timeout: 5000
+  sql:
+    init:
+      mode: always
+      continue-on-error: true
+      encoding: UTF-8
+      schema-locations:
+        - classpath:sql/mysql/schema.sql
+
+dris:
+  auth:
+    issuer: auth-center
+    audience: dris-business-node
+    access-token-ttl-seconds: 7200
+    key-id: dris-v2-auth-rs256
+    key-seed: dris-v2-auth-center-key-seed

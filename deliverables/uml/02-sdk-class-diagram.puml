@@ -1,0 +1,87 @@
+@startuml
+title DRIS Java SDK Next 核心类图
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Microsoft YaHei
+skinparam classAttributeIconSize 0
+
+interface DrisSdk {
+  +identifiers()
+  +metadata()
+  +resources()
+  +close()
+}
+
+interface IdentifierApplicationService {
+  +register(request)
+  +registerBatch(requests)
+  +validate(identifier)
+  +exists(identifier)
+  +parse(identifier)
+  +getDigitalObject(identifier)
+  +delete(request)
+}
+
+interface MetadataApplicationService {
+  +get(identifier)
+  +getBatch(identifiers)
+  +update(request)
+  +patch(request)
+}
+
+interface ResourceApplicationService {
+  +get(identifier)
+  +getBatch(identifiers)
+  +bind(request)
+  +remove(request)
+}
+
+class DefaultDrisSdk
+abstract class AbstractDigitalObjectService
+class DefaultIdentifierApplicationService
+class DefaultMetadataApplicationService
+class DefaultResourceApplicationService
+class IdentifierRules
+
+interface DigitalObjectRepository {
+  +findByIdentifier(identifier)
+  +existsByIdentifier(identifier)
+  +insert(object)
+  +update(object, expectedRevision)
+}
+
+interface RegistrationDictionary
+interface TransactionRunner
+interface TimeProvider
+interface IdentifierCredentialGenerator
+
+class DigitalObject
+class IdentifierMetadata
+class Resource
+
+DrisSdk <|.. DefaultDrisSdk
+IdentifierApplicationService <|.. DefaultIdentifierApplicationService
+MetadataApplicationService <|.. DefaultMetadataApplicationService
+ResourceApplicationService <|.. DefaultResourceApplicationService
+
+AbstractDigitalObjectService <|-- DefaultIdentifierApplicationService
+AbstractDigitalObjectService <|-- DefaultMetadataApplicationService
+AbstractDigitalObjectService <|-- DefaultResourceApplicationService
+
+DefaultDrisSdk --> IdentifierApplicationService
+DefaultDrisSdk --> MetadataApplicationService
+DefaultDrisSdk --> ResourceApplicationService
+
+AbstractDigitalObjectService --> DigitalObjectRepository
+AbstractDigitalObjectService --> TransactionRunner
+AbstractDigitalObjectService --> TimeProvider
+
+DefaultIdentifierApplicationService --> RegistrationDictionary
+DefaultIdentifierApplicationService --> IdentifierCredentialGenerator
+DefaultIdentifierApplicationService ..> IdentifierRules
+DefaultMetadataApplicationService --> RegistrationDictionary
+DefaultMetadataApplicationService ..> IdentifierRules
+
+DigitalObject *-- IdentifierMetadata
+DigitalObject *-- Resource
+@enduml

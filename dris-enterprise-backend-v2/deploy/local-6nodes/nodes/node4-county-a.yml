@@ -1,0 +1,66 @@
+﻿server:
+  port: 8203
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/dris_lab_node4?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: sbq254172
+  sql:
+    init:
+      mode: always
+      continue-on-error: true
+      encoding: UTF-8
+      schema-locations:
+        - classpath:sql/mysql/schema.sql
+        - classpath:sql/mysql/extension_schema.sql
+
+dris:
+  v2:
+    node-id: node4-county-a
+    node-level: COUNTY
+    mode: jdbc
+    region-code: 1100
+    organization-code: CNTA
+    drirp-enabled: true
+    drirp-port: 19203
+    drirp-public-url: grpc://127.0.0.1:19203
+    parent-node-id: node3-city-a
+    parent-drirp-url: grpc://127.0.0.1:19202
+    parent-region-code: 1100
+    parent-organization-code: CTAA
+    startup-hello-enabled: true
+    resolve-mode: recursive
+    resolve-max-hops: 8
+    resolve-timeout-ms: 5000
+    resolve-allow-parent-fallback: true
+    vector-auto-sync-enabled: false
+    topology-health:
+      enabled: true
+      initial-delay-ms: 5000
+      interval-ms: 15000
+      timeout-ms: 3000
+      offline-threshold-ms: 45000
+      offline-failure-threshold: 3
+      startup-hello-max-attempts: 3
+      startup-hello-retry-interval-ms: 2000
+      probe-children-enabled: true
+      notify-on-shutdown: true
+    storage-provider: "${DRIS_STORAGE_PROVIDER:cos}"
+    storage-endpoint: "${DRIS_STORAGE_ENDPOINT:https://cos.ap-beijing.myqcloud.com}"
+    storage-region: "${DRIS_STORAGE_REGION:ap-beijing}"
+    default-bucket: "${DRIS_DEFAULT_BUCKET:dris-repo-prod-1330585503}"
+    storage-public-base-url: "${DRIS_STORAGE_PUBLIC_BASE_URL:}"
+    storage-secret-id: "AKIDzqWzEGI8lkbHo9IF5lVCl8Wq10mTAf4N"
+    storage-secret-key: "PgnjXCfv1vd8SbXTyHMJ6hiaGj04ye6L"
+    storage-session-token: ""
+    auth:
+      api-auth-required: false
+      write-permission-enabled: true
+
+
+
+
+
+

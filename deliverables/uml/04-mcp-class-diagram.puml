@@ -1,0 +1,56 @@
+@startuml
+title MCP服务与研究编排核心类图
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Microsoft YaHei
+skinparam classAttributeIconSize 0
+
+class McpServer
+class DrisApiClient {
+  +resolveMetadata()
+  +resolveObject()
+  +resolveComponent()
+  +batchResolveMetadataDistributed()
+  +batchResolveObjectDistributed()
+  +batchResolveComponentDistributed()
+  +searchGlobal()
+  +queryAuditLogs()
+  +getNodeRoutes()
+}
+
+class createMcpServer
+class registerTools
+class registerResources
+class registerPrompts
+
+class McpResearchClient {
+  +connect(mcpUrl)
+  +disconnect()
+  +listTools()
+  +callTool(toolName, args)
+}
+
+class PlannerService
+class HeuristicPlanner
+class LlmPlanner
+class ResearchService {
+  +runResearch(env, request)
+  +streamResearch(env, request, hooks)
+}
+
+class ReportBuilder
+
+createMcpServer ..> McpServer
+createMcpServer --> DrisApiClient
+createMcpServer ..> registerTools
+createMcpServer ..> registerResources
+createMcpServer ..> registerPrompts
+
+ResearchService --> PlannerService
+PlannerService ..> HeuristicPlanner
+PlannerService ..> LlmPlanner
+ResearchService --> McpResearchClient
+ResearchService --> ReportBuilder
+McpResearchClient ..> McpServer : MCP Streamable HTTP
+DrisApiClient ..> "Enterprise Backend API"
+@enduml
