@@ -25,33 +25,41 @@
         </div>
       </article>
 
-      <article v-for="section in report.summarySections" :key="section.title" class="report-section">
-        <h3>{{ translateUiText(section.title) }}</h3>
-        <ul>
-          <li v-for="line in section.lines" :key="line">{{ translateUiText(line) }}</li>
-        </ul>
+      <article class="report-markdown">
+        <pre>{{ report.markdown }}</pre>
       </article>
 
-      <div class="evidence-grid">
-        <article
-          v-for="card in report.evidenceCards"
-          :key="`${card.title}-${card.subtitle || ''}`"
-          class="evidence-card"
-          :class="`tone-${card.tone || 'neutral'}`"
-        >
-          <p class="evidence-subtitle">{{ translateUiText(card.subtitle || '') }}</p>
-          <h4>{{ translateUiText(card.title) }}</h4>
-          <dl v-if="card.metrics?.length" class="evidence-metrics">
-            <div v-for="metric in card.metrics" :key="`${card.title}-${metric.label}`">
-              <dt>{{ translateUiText(metric.label) }}</dt>
-              <dd>{{ translateUiText(metric.value) }}</dd>
-            </div>
-          </dl>
-          <ul v-if="card.bullets?.length" class="evidence-bullets">
-            <li v-for="bullet in card.bullets" :key="bullet">{{ translateUiText(bullet) }}</li>
+      <details class="structured-panel">
+        <summary>展开结构化摘要与证据</summary>
+
+        <article v-for="section in report.summarySections" :key="section.title" class="report-section">
+          <h3>{{ translateUiText(section.title) }}</h3>
+          <ul>
+            <li v-for="line in section.lines" :key="line">{{ translateUiText(line) }}</li>
           </ul>
         </article>
-      </div>
+
+        <div class="evidence-grid">
+          <article
+            v-for="card in report.evidenceCards"
+            :key="`${card.title}-${card.subtitle || ''}`"
+            class="evidence-card"
+            :class="`tone-${card.tone || 'neutral'}`"
+          >
+            <p class="evidence-subtitle">{{ translateUiText(card.subtitle || '') }}</p>
+            <h4>{{ translateUiText(card.title) }}</h4>
+            <dl v-if="card.metrics?.length" class="evidence-metrics">
+              <div v-for="metric in card.metrics" :key="`${card.title}-${metric.label}`">
+                <dt>{{ translateUiText(metric.label) }}</dt>
+                <dd>{{ translateUiText(metric.value) }}</dd>
+              </div>
+            </dl>
+            <ul v-if="card.bullets?.length" class="evidence-bullets">
+              <li v-for="bullet in card.bullets" :key="bullet">{{ translateUiText(bullet) }}</li>
+            </ul>
+          </article>
+        </div>
+      </details>
 
       <details class="markdown-panel">
         <summary>展开 Markdown 原文</summary>
@@ -74,3 +82,26 @@ function formatTime(value: string): string {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString("zh-CN", { hour12: false });
 }
 </script>
+
+<style scoped>
+.report-markdown {
+  border: 1px solid rgba(31, 41, 55, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 18px 20px;
+}
+
+.report-markdown pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.8;
+  font-size: 14px;
+  color: #1f2937;
+  font-family: "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC", sans-serif;
+}
+
+.structured-panel {
+  margin-top: 16px;
+}
+</style>

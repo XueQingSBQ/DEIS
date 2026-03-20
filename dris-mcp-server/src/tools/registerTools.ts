@@ -5,6 +5,7 @@ import { buildErrorResult, buildSuccessResult } from "../adapter/responseMappers
 import {
   apiEnvelopeOutputSchema,
   auditQueryInputSchema,
+  downloadPresignInputSchema,
   identifierSchema,
   identifiersSchema,
   searchGlobalInputSchema
@@ -182,6 +183,34 @@ export function registerTools(server: McpServer, client: DrisApiClient): void {
         return buildSuccessResult(`Global search completed for query: ${args.naturalQuery}`, envelope);
       } catch (error) {
         return buildErrorResult("Global search", error);
+      }
+    }
+  );
+
+  server.registerTool(
+    "create_download_presign",
+    {
+      title: "Create Download Presign",
+      description: "Create a distributed presigned download URL for the resource bound to an identifier.",
+      inputSchema: downloadPresignInputSchema,
+      outputSchema: apiEnvelopeOutputSchema,
+      annotations: {
+        title: "Create Download Presign",
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false
+      }
+    },
+    async (args, extra) => {
+      try {
+        const envelope = await client.createDownloadPresign(args, buildDrisRequestContext(extra));
+        const data = envelope.data && typeof envelope.data === "object"
+          ? { ...(envelope.data as Record<string, unknown>), identifier: args.identifier }
+          : { identifier: args.identifier };
+        return buildSuccessResult(`Created download URL for ${args.identifier}`, { ...envelope, data });
+      } catch (error) {
+        return buildErrorResult(`Creating download URL for ${args.identifier}`, error);
       }
     }
   );

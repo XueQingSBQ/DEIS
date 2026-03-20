@@ -62,6 +62,7 @@ import type { ConsoleNodeOption } from "../composables/useConsoleRuntime";
 
 interface StatusItem {
   nodeCode?: string;
+  childCode?: string;
   relationStatus?: string;
   healthStatus?: string;
   online?: boolean;
@@ -124,8 +125,9 @@ function compactEndpoint(endpoint: string): string {
 const statusMap = computed(() => {
   const map = new Map<string, StatusItem>();
   for (const item of props.statusItems ?? []) {
-    if (item.nodeCode) {
-      map.set(item.nodeCode, item);
+    const code = item.childCode || item.nodeCode;
+    if (code) {
+      map.set(code, item);
     }
   }
   return map;

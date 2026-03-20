@@ -767,7 +767,7 @@ public class DistributedSearchSupport {
             acc.result.setSemanticScore(acc.bestSemanticScore);
             acc.result.setLocalScore(acc.bestLocalScore);
             acc.result.setFusionScore(acc.rrfScore);
-            acc.result.setFinalScore(acc.rrfScore);
+            acc.result.setFinalScore(computeGlobalScore(acc));
             out.add(acc.result);
         }
         out.sort(new Comparator<SearchResult>() {
@@ -887,6 +887,17 @@ public class DistributedSearchSupport {
 
     private double bestOriginalScore(RankAccumulator acc) {
         return acc == null ? 0.0 : acc.bestOriginalFinalScore;
+    }
+
+    private double computeGlobalScore(RankAccumulator acc) {
+        if (acc == null) {
+            return 0.0;
+        }
+        double rrf = acc.rrfScore;
+        double semanticBoost = Math.min(1.0, acc.bestSemanticScore) * 0.02;
+        double localBoost = Math.min(1.2, acc.bestLocalScore) * 0.004;
+        double crossSourceBoost = Math.min(3, sourceCount(acc)) * 0.001;
+        return rrf + semanticBoost + localBoost + crossSourceBoost;
     }
 
     private SearchRequest buildPerNodeSearchRequest(SearchRequest base, int perNodeLimit) {
@@ -1394,6 +1405,5 @@ public class DistributedSearchSupport {
         }
     }
 }
-
 
 

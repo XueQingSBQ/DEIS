@@ -98,7 +98,7 @@
                     <option value="">沿用后端默认</option>
                     <option v-for="model in agentModels" :key="model" :value="model">{{ model }}</option>
                   </select>
-                  <input v-else v-model.trim="agentModelInput" class="text-input" type="text" placeholder="例如 gpt-5.4-medium" />
+                  <input v-else v-model.trim="agentModelInput" class="text-input" type="text" placeholder="例如 gpt-5.4" />
                 </div>
                 <button class="button ghost small" type="button" :disabled="agentModelsBusy" @click="loadAgentModelsAction()">
                   {{ agentModelsBusy ? '加载中...' : '刷新模型' }}
@@ -293,8 +293,8 @@ const form = reactive<ResearchFormState>({
   ttl: 4,
   maxFanout: 8,
   perNodeLimit: 20,
-  globalDeadlineMs: 5000,
-  hopTimeoutMs: 1500,
+  globalDeadlineMs: 30000,
+  hopTimeoutMs: 5000,
   auditOperation: "",
   auditStartTime: "",
   auditEndTime: "",
@@ -371,6 +371,9 @@ function resetRunState(): void {
 }
 
 function rebuildMarkdown(next: ResearchReport): string {
+  if (next.narrativeMarkdown?.trim()) {
+    return next.markdown;
+  }
   const lines: string[] = [
     `# ${next.title}`,
     "",

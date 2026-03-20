@@ -23,6 +23,11 @@ export interface QueryAuditLogsParams {
   size?: number;
 }
 
+export interface DownloadPresignParams {
+  identifier: string;
+  expiresInSeconds?: number;
+}
+
 export interface SearchGlobalParams {
   naturalQuery: string;
   keywords?: string[];
@@ -145,6 +150,10 @@ export class DrisApiClient {
       undefined,
       context
     );
+  }
+
+  async createDownloadPresign(payload: DownloadPresignParams, context: DrisRequestContext): Promise<DrisApiEnvelope> {
+    return this.request("POST", "/api/v2/downloads/presign", payload, context);
   }
 
   async getNodeRoutes(context: DrisRequestContext): Promise<DrisApiEnvelope> {

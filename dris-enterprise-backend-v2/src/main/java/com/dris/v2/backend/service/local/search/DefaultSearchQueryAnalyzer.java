@@ -148,6 +148,8 @@ public class DefaultSearchQueryAnalyzer implements SearchQueryAnalyzer {
         putIfAbsent(filters, "accessMethod", values, "download", Arrays.asList("download", "downloadable"));
         putIfAbsent(filters, "storageType", values, "cos", Arrays.asList("cos", "qcloud"));
         putIfAbsent(filters, "storageType", values, "s3", Arrays.asList("s3"));
+
+        inferEntityTypeByIntent(filters, values);
     }
 
     private void putIfAbsent(Map<String, String> filters, String key, List<String> values, String targetValue, List<String> hints) {
@@ -164,5 +166,35 @@ public class DefaultSearchQueryAnalyzer implements SearchQueryAnalyzer {
                 }
             }
         }
+    }
+
+    private void inferEntityTypeByIntent(Map<String, String> filters, List<String> values) {
+        if (filters.containsKey("entityType") && !SearchTextSupport.isBlank(filters.get("entityType"))) {
+            return;
+        }
+        String merged = SearchTextSupport.joinTerms(values);
+        String text = SearchTextSupport.safeLower(merged);
+        if (text.isEmpty()) {
+            return;
+        }
+        if (containsAny(text, "附图", "图片", "图像", "照片", "示意图", "截图", "jpg", "jpeg", "png")) {
+            filters.put("entityType", "image");
+            return;
+        }
+        if (containsAny(text,
+                "通知", "公告", "函", "规范", "标准", "指南", "技术要求", "报告", "方案", "文件", "文档",
+                "案例", "动态", "资料", "进展", "地方信息", "建设效益")) {
+            filters.put("entityType", "document");
+        }
+    }
+
+    private boolean containsAny(String text, String... hints) {
+        for (String hint : hints) {
+            String normalized = SearchTextSupport.safeLower(hint);
+            if (!normalized.isEmpty() && text.contains(normalized)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

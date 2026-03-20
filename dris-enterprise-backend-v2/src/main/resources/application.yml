@@ -1,5 +1,10 @@
 ﻿server:
   port: 8190
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
 
 spring:
   application:
@@ -91,6 +96,13 @@ dris:
     search-circuit-failure-threshold: 10
     search-circuit-open-ms: 10000
     search-circuit-half-open-permits: 1
+    search-engine: mysql_like
+    search-es-url: ""
+    search-es-index: ""
+    search-es-username: ""
+    search-es-password: ""
+    search-es-connect-timeout-ms: 3000
+    search-es-request-timeout-ms: 5000
     vector-auto-sync-enabled: true
     vector-auto-sync-initial-delay-ms: 5000
     vector-auto-sync-interval-ms: 30000
@@ -148,6 +160,7 @@ dris:
       auth-center-base-url: http://127.0.0.1:8290
       public-key-pem: ""
       public-key-refresh-ms: 300000
+
 
 
 

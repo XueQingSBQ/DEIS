@@ -1,0 +1,52 @@
+{
+  "profileId": "demo-water-hierarchy",
+  "authProxyBase": "/proxy/auth",
+  "authProxyTarget": "http://127.0.0.1:8290",
+  "services": {
+    "mcpUrl": "http://127.0.0.1:38082/mcp",
+    "orchestratorUrl": "http://127.0.0.1:38083",
+    "authBaseUrl": "http://127.0.0.1:8290"
+  },
+  "defaultSelectedNodeCode": "1100SLMB",
+  "nodes": [
+    {
+      "code": "1100SLMB",
+      "label": "\u6c34\u5229\u90e8",
+      "level": "COUNTRY",
+      "backendBaseUrl": "http://127.0.0.1:8300",
+      "proxyBase": "/proxy/node/water-root",
+      "proxyTarget": "http://127.0.0.1:8300",
+      "drirpPublicUrl": "grpc://127.0.0.1:19300"
+    },
+    {
+      "code": "1100WRAA",
+      "label": "\u6c34\u79d1\u9662",
+      "level": "PROVINCE",
+      "backendBaseUrl": "http://127.0.0.1:8301",
+      "proxyBase": "/proxy/node/water-academy",
+      "proxyTarget": "http://127.0.0.1:8301",
+      "drirpPublicUrl": "grpc://127.0.0.1:19301",
+      "parentCode": "1100SLMB"
+    },
+    {
+      "code": "1100JZAA",
+      "label": "\u51cf\u707e\u6240",
+      "level": "CITY",
+      "backendBaseUrl": "http://127.0.0.1:8302",
+      "proxyBase": "/proxy/node/water-institute",
+      "proxyTarget": "http://127.0.0.1:8302",
+      "drirpPublicUrl": "grpc://127.0.0.1:19302",
+      "parentCode": "1100WRAA"
+    },
+    {
+      "code": "1100SYSA",
+      "label": "XX\u7cfb\u7edf",
+      "level": "COUNTY",
+      "backendBaseUrl": "http://127.0.0.1:8303",
+      "proxyBase": "/proxy/node/water-system",
+      "proxyTarget": "http://127.0.0.1:8303",
+      "drirpPublicUrl": "grpc://127.0.0.1:19303",
+      "parentCode": "1100JZAA"
+    }
+  ]
+}

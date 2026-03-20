@@ -2,6 +2,7 @@
 import { extractEnvelope } from "../executor/mcpResearchClient.js";
 import type { BatchItemBase, SearchItem } from "../types/research.js";
 import type { ResourcePreviewInfo, ResourcePreviewMap } from "./buildReport.js";
+import { extractBinaryResourceText } from "./resourceBinaryExtractor.js";
 
 interface SearchResourceItem extends SearchItem {
   locator?: string | null;
@@ -19,6 +20,7 @@ interface PreviewCandidate {
   identifier: string;
   name: string;
   locator: string;
+  accessUrl: string;
   contentType: string;
   format: string;
   rank: number;
@@ -96,11 +98,47 @@ function readBatchItems<T extends BatchItemBase>(output: unknown): T[] {
     : [];
 }
 
+function readSingleComponentItems(output: unknown): ComponentBatchItem[] {
+  const data = readObject(asEnvelope(output).data);
+  if (!data) {
+    return [];
+  }
+  const resource = readObject(data.resource);
+  const identifier = readString(data.identifier);
+  if (!resource || !identifier) {
+    return [];
+  }
+  return [
+    {
+      identifier,
+      resource
+    }
+  ];
+}
+
+function readSingleObjectItems(output: unknown): ObjectBatchItem[] {
+  const data = readObject(asEnvelope(output).data);
+  if (!data) {
+    return [];
+  }
+  const identifier = readString(data.identifier);
+  if (!identifier) {
+    return [];
+  }
+  return [
+    {
+      identifier,
+      digitalObject: data
+    }
+  ];
+}
+
 function mergeCandidate(target: PreviewCandidate, source: Partial<PreviewCandidate>): PreviewCandidate {
   return {
     identifier: target.identifier || source.identifier || "",
     name: target.name || source.name || "",
     locator: target.locator || source.locator || "",
+    accessUrl: target.accessUrl || source.accessUrl || "",
     contentType: target.contentType || source.contentType || "",
     format: target.format || source.format || "",
     rank: Math.min(target.rank, source.rank ?? Number.MAX_SAFE_INTEGER),
@@ -112,10 +150,32 @@ function buildPreviewCandidates(outputs: Record<string, unknown>, limit: number)
   const searchOutputs = collectToolOutputs(outputs, "search_global");
   const componentOutputs = collectToolOutputs(outputs, "batch_resolve_component_distributed");
   const objectOutputs = collectToolOutputs(outputs, "batch_resolve_object_distributed");
+  const singleComponentOutputs = collectToolOutputs(outputs, "resolve_component");
+  const singleObjectOutputs = collectToolOutputs(outputs, "resolve_object");
+  const presignOutputs = collectToolOutputs(outputs, "create_download_presign");
 
   const searchItems = searchOutputs.flatMap((output) => readSearchItems(output));
-  const componentItems = componentOutputs.flatMap((output) => readBatchItems<ComponentBatchItem>(output));
-  const objectItems = objectOutputs.flatMap((output) => readBatchItems<ObjectBatchItem>(output));
+  const componentItems = [
+    ...componentOutputs.flatMap((output) => readBatchItems<ComponentBatchItem>(output)),
+    ...singleComponentOutputs.flatMap((output) => readSingleComponentItems(output))
+  ];
+  const objectItems = [
+    ...objectOutputs.flatMap((output) => readBatchItems<ObjectBatchItem>(output)),
+    ...singleObjectOutputs.flatMap((output) => readSingleObjectItems(output))
+  ];
+
+  const presignedUrlByIdentifier = new Map<string, string>();
+  for (const output of presignOutputs) {
+    const data = readObject(asEnvelope(output).data);
+    if (!data) {
+      continue;
+    }
+    const identifier = readString((data as { identifier?: unknown }).identifier);
+    const url = readString((data as { url?: unknown }).url);
+    if (identifier && url) {
+      presignedUrlByIdentifier.set(identifier, url);
+    }
+  }
 
   const searchInfoByIdentifier = new Map<string, { name: string; rank: number; score: number | null }>();
   for (const [index, item] of searchItems.entries()) {
@@ -134,11 +194,18 @@ function buildPreviewCandidates(outputs: Record<string, unknown>, limit: number)
 
   const candidateByLocator = new Map<string, PreviewCandidate>();
   const upsertCandidate = (candidate: PreviewCandidate): void => {
-    if (!candidate.locator || !/^https?:\/\//i.test(candidate.locator)) {
+    if (!candidate.locator || !candidate.accessUrl || !/^https?:\/\//i.test(candidate.accessUrl)) {
       return;
     }
     const existing = candidateByLocator.get(candidate.locator);
     candidateByLocator.set(candidate.locator, existing ? mergeCandidate(existing, candidate) : candidate);
+  };
+
+  const resolveAccessUrl = (identifier: string, locator: string): string => {
+    if (/^https?:\/\//i.test(locator)) {
+      return locator;
+    }
+    return presignedUrlByIdentifier.get(identifier) || "";
   };
 
   for (const item of componentItems) {
@@ -148,10 +215,12 @@ function buildPreviewCandidates(outputs: Record<string, unknown>, limit: number)
     }
     const identifier = readString(item.identifier);
     const searchInfo = searchInfoByIdentifier.get(identifier);
+    const locator = readString(resource.locator);
     upsertCandidate({
       identifier,
       name: searchInfo?.name || "",
-      locator: readString(resource.locator),
+      locator,
+      accessUrl: resolveAccessUrl(identifier, locator),
       contentType: readString(resource.contentType),
       format: readString(resource.format),
       rank: searchInfo?.rank ?? Number.MAX_SAFE_INTEGER,
@@ -167,10 +236,12 @@ function buildPreviewCandidates(outputs: Record<string, unknown>, limit: number)
     }
     const identifier = readString(item.identifier);
     const searchInfo = searchInfoByIdentifier.get(identifier);
+    const locator = readString(resource.locator);
     upsertCandidate({
       identifier,
       name: searchInfo?.name || "",
-      locator: readString(resource.locator),
+      locator,
+      accessUrl: resolveAccessUrl(identifier, locator),
       contentType: readString(resource.contentType),
       format: readString(resource.format),
       rank: searchInfo?.rank ?? Number.MAX_SAFE_INTEGER,
@@ -193,7 +264,7 @@ function buildPreviewCandidates(outputs: Record<string, unknown>, limit: number)
     .slice(0, limit);
 }
 
-function inferContentType(headerValue: string, locator: string, format: string): string {
+function inferContentType(headerValue: string, resourcePath: string, format: string): string {
   const normalizedHeader = headerValue.split(";")[0]?.trim().toLowerCase() || "";
   if (normalizedHeader) {
     return normalizedHeader;
@@ -210,9 +281,9 @@ function inferContentType(headerValue: string, locator: string, format: string):
   }
   const pathname = (() => {
     try {
-      return new URL(locator).pathname.toLowerCase();
+      return new URL(resourcePath).pathname.toLowerCase();
     } catch {
-      return locator.toLowerCase();
+      return resourcePath.toLowerCase();
     }
   })();
   if (pathname.endsWith(".csv")) {
@@ -255,8 +326,8 @@ function looksLikeOleDocument(sample: Uint8Array): boolean {
     && sample[7] === 0xe1;
 }
 
-function isKnownBinaryLocator(locator: string): boolean {
-  const lowerLocator = locator.toLowerCase();
+function isKnownBinaryLocator(resourcePath: string): boolean {
+  const lowerLocator = resourcePath.toLowerCase();
   return /(\.pdf|\.doc|\.docx|\.xls|\.xlsx|\.ppt|\.pptx|\.zip|\.rar|\.7z|\.gz|\.tar)(\?|$)/.test(lowerLocator);
 }
 
@@ -279,17 +350,17 @@ function isProbablyText(sample: Uint8Array): boolean {
   return printable / Math.min(sample.length, 128) >= 0.75;
 }
 
-function isTextual(contentType: string, locator: string, sample: Uint8Array): boolean {
+function isTextual(contentType: string, resourcePath: string, sample: Uint8Array): boolean {
   if (looksLikeZip(sample) || looksLikeOleDocument(sample)) {
     return false;
   }
   if (/(pdf|wordprocessingml|msword|officedocument|vnd\.ms-|zip)/.test(contentType)) {
     return false;
   }
-  if (contentType.includes("application/octet-stream") && isKnownBinaryLocator(locator)) {
+  if (contentType.includes("application/octet-stream") && isKnownBinaryLocator(resourcePath)) {
     return false;
   }
-  if (isKnownBinaryLocator(locator)) {
+  if (isKnownBinaryLocator(resourcePath)) {
     return false;
   }
   if (/^text\//.test(contentType)) {
@@ -298,7 +369,7 @@ function isTextual(contentType: string, locator: string, sample: Uint8Array): bo
   if (/(json|xml|csv|html)/.test(contentType)) {
     return true;
   }
-  const lowerLocator = locator.toLowerCase();
+  const lowerLocator = resourcePath.toLowerCase();
   if (/(\.csv|\.json|\.xml|\.html|\.htm|\.txt|\.md)(\?|$)/.test(lowerLocator)) {
     return true;
   }
@@ -350,7 +421,7 @@ function parseJsonPreview(text: string): { summary: string; lines: string[]; kin
       };
     }
   } catch {
-    // ignore and fall back to text preview
+    // ignore and fall back
   }
   return {
     kind: "json",
@@ -393,9 +464,9 @@ function parseTextPreview(text: string): { summary: string; lines: string[]; kin
   };
 }
 
-function parsePreviewBody(sample: Uint8Array, contentType: string, locator: string): { summary: string; lines: string[]; kind: string } {
-  if (!isTextual(contentType, locator, sample)) {
-    const officeOrArchive = looksLikeZip(sample) || looksLikeOleDocument(sample) || isKnownBinaryLocator(locator);
+function parsePreviewBody(sample: Uint8Array, contentType: string, resourcePath: string): { summary: string; lines: string[]; kind: string } {
+  if (!isTextual(contentType, resourcePath, sample)) {
+    const officeOrArchive = looksLikeZip(sample) || looksLikeOleDocument(sample) || isKnownBinaryLocator(resourcePath);
     return {
       kind: "binary",
       summary: officeOrArchive
@@ -465,7 +536,7 @@ async function fetchSinglePreview(candidate: PreviewCandidate, env: EnvConfig): 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), env.RESOURCE_PREVIEW_TIMEOUT_MS);
   try {
-    const response = await fetch(candidate.locator, {
+    const response = await fetch(candidate.accessUrl, {
       method: "GET",
       headers: {
         Accept: PREVIEW_ACCEPT,
@@ -474,7 +545,8 @@ async function fetchSinglePreview(candidate: PreviewCandidate, env: EnvConfig): 
       signal: controller.signal
     });
 
-    const contentType = inferContentType(response.headers.get("content-type") || candidate.contentType, candidate.locator, candidate.format);
+    const resourcePath = candidate.accessUrl || candidate.locator;
+    const contentType = inferContentType(response.headers.get("content-type") || candidate.contentType, resourcePath, candidate.format);
     const contentLength = readNumber(response.headers.get("content-length")) ?? null;
 
     if (!response.ok) {
@@ -498,19 +570,53 @@ async function fetchSinglePreview(candidate: PreviewCandidate, env: EnvConfig): 
         contentType,
         contentLength,
         summary,
+        excerpt: "",
         lines: [detail]
       };
     }
 
     const sample = await readResponseSample(response, env.RESOURCE_PREVIEW_BYTES);
-    const parsed = parsePreviewBody(sample, contentType, candidate.locator);
+    const parsed = parsePreviewBody(sample, contentType, resourcePath);
+    let kind = parsed.kind;
+    let summary = parsed.summary;
+    let lines = parsed.lines;
+    let excerpt = "";
+
+    const shouldExtractBinaryText =
+      parsed.kind === "binary"
+      && (
+        /(pdf|wordprocessingml|msword|officedocument)/.test(contentType)
+        || /(\.pdf|\.doc|\.docx)(\?|$)/i.test(resourcePath)
+        || /(pdf|doc|docx)/i.test(candidate.format)
+      );
+
+    if (shouldExtractBinaryText) {
+      try {
+        const extracted = await extractBinaryResourceText(
+          candidate.accessUrl,
+          contentType,
+          Math.max(env.RESOURCE_PREVIEW_TIMEOUT_MS, 8000),
+          Math.max(env.RESOURCE_PREVIEW_BYTES * 2, 4000)
+        );
+        if (extracted.ok) {
+          kind = extracted.kind || kind;
+          summary = extracted.summary || summary;
+          lines = extracted.lines.length ? extracted.lines : lines;
+          excerpt = extracted.excerpt || "";
+        }
+      } catch {
+        // keep fallback
+      }
+    }
+
     return {
       locator: candidate.locator,
-      kind: parsed.kind,
+      kind,
       contentType,
       contentLength,
-      summary: parsed.summary,
-      lines: parsed.lines
+      summary,
+      excerpt,
+      lines
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -520,6 +626,7 @@ async function fetchSinglePreview(candidate: PreviewCandidate, env: EnvConfig): 
       contentType: inferContentType(candidate.contentType, candidate.locator, candidate.format),
       contentLength: null,
       summary: `预览失败：${shortText(message, 80)}`,
+      excerpt: "",
       lines: [`资源预览失败：${shortText(message, 160)}`]
     };
   } finally {
@@ -564,4 +671,3 @@ export async function collectResourcePreviews(env: EnvConfig, outputs: Record<st
     attemptedCount: candidates.length
   };
 }
-

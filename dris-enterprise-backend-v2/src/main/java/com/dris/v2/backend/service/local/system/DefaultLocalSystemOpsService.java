@@ -1,11 +1,14 @@
 package com.dris.v2.backend.service.local.system;
 
 import com.dris.sdk.next.domain.IdentifierMetadata;
+import com.dris.v2.backend.contract.system.KeywordIndexSyncResult;
 import com.dris.v2.backend.contract.DrisResponse;
 import com.dris.v2.backend.contract.system.VectorSyncResult;
+import com.dris.v2.backend.dao.IdentifierSearchDao;
 import com.dris.v2.backend.vector.VectorIndexGateway;
 import com.dris.v2.backend.dao.IdentifierVectorMaintenanceDao;
 import com.dris.v2.backend.metrics.BackendOperationMetrics;
+import com.dris.v2.backend.service.local.search.KeywordSearchGateway;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -16,16 +19,22 @@ import java.util.Map;
 @Service
 public class DefaultLocalSystemOpsService implements LocalSystemOpsService {
     private final IdentifierVectorMaintenanceDao identifierVectorMaintenanceDao;
+    private final IdentifierSearchDao identifierSearchDao;
     private final VectorIndexGateway vectorIndexGateway;
+    private final KeywordSearchGateway keywordSearchGateway;
     private final BackendOperationMetrics metrics;
 
     public DefaultLocalSystemOpsService(
             IdentifierVectorMaintenanceDao identifierVectorMaintenanceDao,
+            IdentifierSearchDao identifierSearchDao,
             VectorIndexGateway vectorIndexGateway,
+            KeywordSearchGateway keywordSearchGateway,
             BackendOperationMetrics metrics
     ) {
         this.identifierVectorMaintenanceDao = identifierVectorMaintenanceDao;
+        this.identifierSearchDao = identifierSearchDao;
         this.vectorIndexGateway = vectorIndexGateway;
+        this.keywordSearchGateway = keywordSearchGateway;
         this.metrics = metrics;
     }
 
@@ -86,6 +95,36 @@ public class DefaultLocalSystemOpsService implements LocalSystemOpsService {
             return DrisResponse.failure("INTERNAL_ERROR", exception.getMessage(), null);
         } finally {
             metrics.record("syncVectorIndex", System.nanoTime() - start, ok);
+        }
+    }
+
+    @Override
+    public DrisResponse<KeywordIndexSyncResult> initSearchIndex() {
+        long start = System.nanoTime();
+        boolean ok = false;
+        try {
+            KeywordIndexSyncResult result = keywordSearchGateway.initializeIndex();
+            ok = true;
+            return DrisResponse.success(result);
+        } catch (RuntimeException exception) {
+            return DrisResponse.failure("INTERNAL_ERROR", exception.getMessage(), null);
+        } finally {
+            metrics.record("initSearchIndex", System.nanoTime() - start, ok);
+        }
+    }
+
+    @Override
+    public DrisResponse<KeywordIndexSyncResult> rebuildSearchIndex() {
+        long start = System.nanoTime();
+        boolean ok = false;
+        try {
+            KeywordIndexSyncResult result = keywordSearchGateway.rebuildIndex(identifierSearchDao.findAllActive());
+            ok = true;
+            return DrisResponse.success(result);
+        } catch (RuntimeException exception) {
+            return DrisResponse.failure("INTERNAL_ERROR", exception.getMessage(), null);
+        } finally {
+            metrics.record("rebuildSearchIndex", System.nanoTime() - start, ok);
         }
     }
 

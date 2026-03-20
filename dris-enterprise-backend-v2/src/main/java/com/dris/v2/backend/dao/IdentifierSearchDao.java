@@ -41,7 +41,7 @@ public class IdentifierSearchDao {
         SearchPrefetchOrder prefetchOrder = buildSearchPrefetchOrder(safeTokens, dbFields);
         StringBuilder sql = new StringBuilder(
                 "SELECT m.identifier, m.name, m.description, m.application_scenario, m.owner, m.industry, m.data_category, " +
-                        "m.registration_type, m.entity_type, m.status, m.update_time, " +
+                        "m.registration_type, m.entity_type, m.status, m.update_time, m.additional_attributes, " +
                         "r.component_type, r.storage_type, r.access_method, r.content_type, r.format, r.locator, " +
                         prefetchOrder.expression + " AS prefetch_score " +
                         "FROM identifier_metadata m LEFT JOIN resource r ON r.identifier=m.identifier WHERE m.status!='deleted'"
@@ -99,7 +99,8 @@ public class IdentifierSearchDao {
                     row.getAccessMethod(),
                     row.getContentType(),
                     row.getFormat(),
-                    row.getLocator()
+                    row.getLocator(),
+                    row.getAdditionalAttributesText()
             ));
             return row;
         });
@@ -126,7 +127,7 @@ public class IdentifierSearchDao {
             return out;
         }
         StringBuilder sql = new StringBuilder(
-                "SELECT m.identifier, m.name, m.description, m.application_scenario, m.owner, m.industry, m.data_category, m.registration_type, m.entity_type, m.status, m.update_time, r.component_type, r.storage_type, r.access_method, r.content_type, r.format, r.locator FROM identifier_metadata m LEFT JOIN resource r ON r.identifier=m.identifier WHERE m.status!='deleted' AND m.identifier IN ("
+                "SELECT m.identifier, m.name, m.description, m.application_scenario, m.owner, m.industry, m.data_category, m.registration_type, m.entity_type, m.status, m.update_time, m.additional_attributes, r.component_type, r.storage_type, r.access_method, r.content_type, r.format, r.locator FROM identifier_metadata m LEFT JOIN resource r ON r.identifier=m.identifier WHERE m.status!='deleted' AND m.identifier IN ("
         );
         for (int i = 0; i < identifiers.size(); i++) {
             if (i > 0) {
@@ -144,7 +145,7 @@ public class IdentifierSearchDao {
 
     public List<SearchDocumentRow> findAllActive() {
         return jdbcTemplate.query(
-                "SELECT m.identifier, m.name, m.description, m.application_scenario, m.owner, m.industry, m.data_category, m.registration_type, m.entity_type, m.status, m.update_time, r.component_type, r.storage_type, r.access_method, r.content_type, r.format, r.locator FROM identifier_metadata m LEFT JOIN resource r ON r.identifier=m.identifier WHERE m.status!='deleted' ORDER BY m.update_time DESC, m.identifier ASC",
+                "SELECT m.identifier, m.name, m.description, m.application_scenario, m.owner, m.industry, m.data_category, m.registration_type, m.entity_type, m.status, m.update_time, m.additional_attributes, r.component_type, r.storage_type, r.access_method, r.content_type, r.format, r.locator FROM identifier_metadata m LEFT JOIN resource r ON r.identifier=m.identifier WHERE m.status!='deleted' ORDER BY m.update_time DESC, m.identifier ASC",
                 (rs, rowNum) -> mapRow(rs)
         );
     }
@@ -168,6 +169,7 @@ public class IdentifierSearchDao {
         row.setContentType(rs.getString("content_type"));
         row.setFormat(rs.getString("format"));
         row.setLocator(rs.getString("locator"));
+        row.setAdditionalAttributesText(rs.getString("additional_attributes"));
         return row;
     }
 
@@ -203,6 +205,7 @@ public class IdentifierSearchDao {
             appendPrefetchCase(cases, params, dbFields, "r.content_type", 1.0, like);
             appendPrefetchCase(cases, params, dbFields, "r.format", 1.0, like);
             appendPrefetchCase(cases, params, dbFields, "r.locator", 0.8, like);
+            appendPrefetchCase(cases, params, dbFields, "m.additional_attributes", 1.6, like);
             if (cases.isEmpty()) {
                 continue;
             }
@@ -338,6 +341,8 @@ public class IdentifierSearchDao {
                     out.add("r.format");
                 } else if ("locator".equals(value)) {
                     out.add("r.locator");
+                } else if ("additionalattributes".equals(value) || "additional_attributes".equals(value)) {
+                    out.add("m.additional_attributes");
                 }
             }
         }
@@ -357,6 +362,7 @@ public class IdentifierSearchDao {
             out.add("r.content_type");
             out.add("r.format");
             out.add("r.locator");
+            out.add("m.additional_attributes");
         }
         return out;
     }
@@ -377,7 +383,8 @@ public class IdentifierSearchDao {
             String accessMethod,
             String contentType,
             String format,
-            String locator
+            String locator,
+            String additionalAttributes
     ) {
         if (tokens == null || tokens.isEmpty()) {
             return 0.0;
@@ -397,6 +404,7 @@ public class IdentifierSearchDao {
         String ctt = lower(contentType);
         String f = lower(format);
         String loc = lower(locator);
+        String attrs = lower(additionalAttributes);
         double raw = 0.0;
         for (String token : tokens) {
             if (token == null) {
@@ -448,6 +456,9 @@ public class IdentifierSearchDao {
             }
             if (!loc.isEmpty() && loc.contains(value)) {
                 tokenScore = Math.max(tokenScore, 0.8);
+            }
+            if (!attrs.isEmpty() && attrs.contains(value)) {
+                tokenScore = Math.max(tokenScore, 1.6);
             }
             raw += tokenScore;
         }

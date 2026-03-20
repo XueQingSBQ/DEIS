@@ -92,12 +92,26 @@ interface RelevanceView {
   rankByKey: Map<string, number>;
 }
 
+interface RelatedImageProfile {
+  identifier: string;
+  name: string;
+  sourceDocumentIdentifier: string;
+  sourceDocumentName: string;
+  contentSummary: string;
+  contentType: string;
+  format: string;
+  locator: string;
+  accessUrl: string;
+  imageIndex: number | null;
+}
+
 export interface ResourcePreviewInfo {
   locator: string;
   kind: string;
   contentType: string;
   contentLength: number | null;
   summary: string;
+  excerpt?: string;
   lines: string[];
 }
 
@@ -250,6 +264,58 @@ function readBatchItems<T extends BatchItemBase>(output: unknown): T[] {
   return Array.isArray(items) ? (items.filter((item) => item && typeof item === "object") as T[]) : [];
 }
 
+function readSingleMetadataItems(output: unknown): MetadataBatchItem[] {
+  const data = readObject(asEnvelope(output).data);
+  if (!data) {
+    return [];
+  }
+  const identifier = readString(data.identifier);
+  if (!identifier) {
+    return [];
+  }
+  return [
+    {
+      identifier,
+      metadata: data
+    }
+  ];
+}
+
+function readSingleObjectItems(output: unknown): ObjectBatchItem[] {
+  const data = readObject(asEnvelope(output).data);
+  if (!data) {
+    return [];
+  }
+  const identifier = readString(data.identifier);
+  if (!identifier) {
+    return [];
+  }
+  return [
+    {
+      identifier,
+      digitalObject: data
+    }
+  ];
+}
+
+function readSingleComponentItems(output: unknown): ComponentBatchItem[] {
+  const data = readObject(asEnvelope(output).data);
+  if (!data) {
+    return [];
+  }
+  const resource = readObject(data.resource);
+  const identifier = readString(data.identifier);
+  if (!resource || !identifier) {
+    return [];
+  }
+  return [
+    {
+      identifier,
+      resource
+    }
+  ];
+}
+
 function readBatchStats(output: unknown): BatchStats {
   const data = readObject(asEnvelope(output).data);
   if (!data) {
@@ -271,6 +337,14 @@ function readAuditRecords(output: unknown): AuditRecord[] {
   }
   const records = data.records ?? data.items;
   return Array.isArray(records) ? (records.filter((item) => item && typeof item === "object") as AuditRecord[]) : [];
+}
+
+function readStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => readString(item)).filter(Boolean);
+  }
+  const single = readString(value);
+  return single ? [single] : [];
 }
 
 function readNodeRoutes(output: unknown): Array<Record<string, unknown>> {
@@ -367,6 +441,10 @@ function mergeMetadataRecord(profile: ResourceProfile, metadata: Record<string, 
   profile.updateTime = preferText(profile.updateTime, readString(metadata.updateTime), readString(metadata.createTime));
   profile.metadataStatus = preferText(profile.metadataStatus, readString(metadata.status), fallbackCode);
   profile.hasMetadata = true;
+}
+
+function readAdditionalAttributes(metadata: Record<string, unknown>): Record<string, unknown> {
+  return readObject(metadata.additionalAttributes) ?? {};
 }
 
 function mergeResourceRecord(profile: ResourceProfile, resource: Record<string, unknown>): void {
@@ -604,13 +682,25 @@ function buildLandscape(outputs: Record<string, unknown>): ResourceLandscape {
   const metadataOutputs = collectToolOutputs(outputs, "batch_resolve_metadata_distributed");
   const objectOutputs = collectToolOutputs(outputs, "batch_resolve_object_distributed");
   const componentOutputs = collectToolOutputs(outputs, "batch_resolve_component_distributed");
+  const singleMetadataOutputs = collectToolOutputs(outputs, "resolve_metadata");
+  const singleObjectOutputs = collectToolOutputs(outputs, "resolve_object");
+  const singleComponentOutputs = collectToolOutputs(outputs, "resolve_component");
   const auditOutputs = collectToolOutputs(outputs, "query_audit_logs");
   const routeOutputs = collectToolOutputs(outputs, "get_node_routes");
 
   const searchItems = searchOutputs.flatMap((output) => readSearchItems(output));
-  const metadataItems = metadataOutputs.flatMap((output) => readBatchItems<MetadataBatchItem>(output));
-  const objectItems = objectOutputs.flatMap((output) => readBatchItems<ObjectBatchItem>(output));
-  const componentItems = componentOutputs.flatMap((output) => readBatchItems<ComponentBatchItem>(output));
+  const metadataItems = [
+    ...metadataOutputs.flatMap((output) => readBatchItems<MetadataBatchItem>(output)),
+    ...singleMetadataOutputs.flatMap((output) => readSingleMetadataItems(output))
+  ];
+  const objectItems = [
+    ...objectOutputs.flatMap((output) => readBatchItems<ObjectBatchItem>(output)),
+    ...singleObjectOutputs.flatMap((output) => readSingleObjectItems(output))
+  ];
+  const componentItems = [
+    ...componentOutputs.flatMap((output) => readBatchItems<ComponentBatchItem>(output)),
+    ...singleComponentOutputs.flatMap((output) => readSingleComponentItems(output))
+  ];
   const auditRecords = auditOutputs.flatMap((output) => readAuditRecords(output));
   const visitedNodeCodes = unique(searchOutputs.flatMap((output) => readVisitedNodeCodes(output)));
   const failedNodes = searchOutputs.flatMap((output) => readFailedNodes(output));
@@ -670,11 +760,229 @@ function buildLandscape(outputs: Record<string, unknown>): ResourceLandscape {
     auditRecords,
     visitedNodeCodes,
     failedNodes,
-    metadataStats: metadataOutputs[0] ? readBatchStats(metadataOutputs[0]) : { total: 0, successCount: 0, failureCount: 0, partial: false, mode: "unknown" },
-    objectStats: objectOutputs[0] ? readBatchStats(objectOutputs[0]) : { total: 0, successCount: 0, failureCount: 0, partial: false, mode: "unknown" },
-    componentStats: componentOutputs[0] ? readBatchStats(componentOutputs[0]) : { total: 0, successCount: 0, failureCount: 0, partial: false, mode: "unknown" },
+    metadataStats: metadataOutputs[0]
+      ? readBatchStats(metadataOutputs[0])
+      : metadataItems.length
+        ? { total: metadataItems.length, successCount: metadataItems.length, failureCount: 0, partial: false, mode: "single" }
+        : { total: 0, successCount: 0, failureCount: 0, partial: false, mode: "unknown" },
+    objectStats: objectOutputs[0]
+      ? readBatchStats(objectOutputs[0])
+      : objectItems.length
+        ? { total: objectItems.length, successCount: objectItems.length, failureCount: 0, partial: false, mode: "single" }
+        : { total: 0, successCount: 0, failureCount: 0, partial: false, mode: "unknown" },
+    componentStats: componentOutputs[0]
+      ? readBatchStats(componentOutputs[0])
+      : componentItems.length
+        ? { total: componentItems.length, successCount: componentItems.length, failureCount: 0, partial: false, mode: "single" }
+        : { total: 0, successCount: 0, failureCount: 0, partial: false, mode: "unknown" },
     routeCount
   };
+}
+
+function buildRelatedImageProfiles(outputs: Record<string, unknown>): RelatedImageProfile[] {
+  const metadataOutputs = collectToolOutputs(outputs, "related_image_batch_resolve_metadata");
+  const componentOutputs = collectToolOutputs(outputs, "related_image_batch_resolve_component");
+  const presignOutputs = collectToolOutputs(outputs, "related_image_create_download_presign");
+
+  const metadataItems = metadataOutputs.flatMap((output) => readBatchItems<MetadataBatchItem>(output));
+  const componentItems = componentOutputs.flatMap((output) => readBatchItems<ComponentBatchItem>(output));
+
+  const presignedUrlByIdentifier = new Map<string, string>();
+  for (const output of presignOutputs) {
+    const data = readObject(asEnvelope(output).data);
+    if (!data) {
+      continue;
+    }
+    const identifier = readString(data.identifier);
+    const url = readString(data.url);
+    if (identifier && url) {
+      presignedUrlByIdentifier.set(identifier, url);
+    }
+  }
+
+  const byIdentifier = new Map<string, RelatedImageProfile>();
+
+  for (const item of metadataItems) {
+    const identifier = readString(item.identifier);
+    const metadata = readObject(item.metadata);
+    if (!identifier || !metadata) {
+      continue;
+    }
+    const additionalAttributes = readAdditionalAttributes(metadata);
+    const existing = byIdentifier.get(identifier);
+    byIdentifier.set(identifier, {
+      identifier,
+      name: preferText(existing?.name, readString(metadata.name)),
+      sourceDocumentIdentifier: preferText(
+        existing?.sourceDocumentIdentifier,
+        readString(additionalAttributes.sourceDocumentIdentifier)
+      ),
+      sourceDocumentName: preferText(existing?.sourceDocumentName, readString(additionalAttributes.sourceDocumentName)),
+      contentSummary: preferText(
+        existing?.contentSummary,
+        readString(additionalAttributes.contentSummary),
+        readString(metadata.description)
+      ),
+      contentType: preferText(existing?.contentType, readString(additionalAttributes.contentType)),
+      format: preferText(existing?.format, readString(additionalAttributes.format)),
+      locator: existing?.locator || "",
+      accessUrl: existing?.accessUrl || presignedUrlByIdentifier.get(identifier) || "",
+      imageIndex: existing?.imageIndex ?? readNumber(additionalAttributes.imageIndex)
+    });
+  }
+
+  for (const item of componentItems) {
+    const identifier = readString(item.identifier);
+    const resource = readObject(item.resource);
+    if (!identifier || !resource) {
+      continue;
+    }
+    const existing = byIdentifier.get(identifier);
+    byIdentifier.set(identifier, {
+      identifier,
+      name: existing?.name || "",
+      sourceDocumentIdentifier: existing?.sourceDocumentIdentifier || "",
+      sourceDocumentName: existing?.sourceDocumentName || "",
+      contentSummary: existing?.contentSummary || "",
+      contentType: preferText(existing?.contentType, readString(resource.contentType)),
+      format: preferText(existing?.format, readString(resource.format)),
+      locator: preferText(existing?.locator, readString(resource.locator)),
+      accessUrl: preferText(existing?.accessUrl, presignedUrlByIdentifier.get(identifier)),
+      imageIndex: existing?.imageIndex ?? null
+    });
+  }
+
+  return Array.from(byIdentifier.values()).sort((left, right) => {
+    const sourceCompare = preferText(left.sourceDocumentName, left.sourceDocumentIdentifier).localeCompare(
+      preferText(right.sourceDocumentName, right.sourceDocumentIdentifier),
+      "zh-CN"
+    );
+    if (sourceCompare !== 0) {
+      return sourceCompare;
+    }
+    const leftIndex = left.imageIndex ?? Number.MAX_SAFE_INTEGER;
+    const rightIndex = right.imageIndex ?? Number.MAX_SAFE_INTEGER;
+    if (leftIndex !== rightIndex) {
+      return leftIndex - rightIndex;
+    }
+    return preferText(left.name, left.identifier).localeCompare(preferText(right.name, right.identifier), "zh-CN");
+  });
+}
+
+function buildRelatedImageSummarySection(images: RelatedImageProfile[]): SummarySection | null {
+  if (!images.length) {
+    return null;
+  }
+
+  const groups = new Map<string, RelatedImageProfile[]>();
+  for (const image of images) {
+    const key = preferText(image.sourceDocumentIdentifier, image.sourceDocumentName, image.identifier);
+    const existing = groups.get(key) ?? [];
+    existing.push(image);
+    groups.set(key, existing);
+  }
+
+  const lines: string[] = [
+    `共关联解析 ${images.length} 个图像资源，覆盖 ${groups.size} 份源文档。`
+  ];
+
+  Array.from(groups.values())
+    .sort((left, right) => right.length - left.length)
+    .slice(0, 4)
+    .forEach((group, index) => {
+      const first = group[0]!;
+      const label = preferText(first.sourceDocumentName, first.sourceDocumentIdentifier, first.name, first.identifier);
+      const summaries = group
+        .map((image) => shortText(preferText(image.contentSummary, image.name), 36))
+        .filter(Boolean)
+        .slice(0, 3)
+        .join("；");
+      lines.push(`${index + 1}. ${label} 关联图像 ${group.length} 幅${summaries ? `，主要包括：${summaries}` : ""}`);
+    });
+
+  images
+    .filter((image) => image.contentSummary)
+    .slice(0, 3)
+    .forEach((image, index) => {
+      lines.push(
+        `图像样本${index + 1}：${preferText(image.sourceDocumentName, image.sourceDocumentIdentifier, "未命名文档")} - ${shortText(image.contentSummary, 120)}`
+      );
+    });
+
+  return {
+    title: "关联图像证据",
+    lines
+  };
+}
+
+function buildRelatedImageEvidenceCard(images: RelatedImageProfile[]): EvidenceCard | null {
+  if (!images.length) {
+    return null;
+  }
+
+  const groups = new Map<string, number>();
+  for (const image of images) {
+    const key = preferText(image.sourceDocumentName, image.sourceDocumentIdentifier, image.identifier);
+    groups.set(key, (groups.get(key) ?? 0) + 1);
+  }
+
+  const topSources = Array.from(groups.entries())
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 4)
+    .map(([label, count]) => `${label}(${count})`);
+
+  const sampleBullets = images
+    .filter((image) => image.contentSummary)
+    .slice(0, 4)
+    .map((image) => `${preferText(image.name, image.identifier)}：${shortText(image.contentSummary, 120)}`);
+
+  return {
+    title: "关联图像证据",
+    subtitle: "由父文档元数据中的派生图像关系补充",
+    tone: "good",
+    metrics: [
+      { label: "图像数量", value: String(images.length) },
+      { label: "覆盖文档", value: String(groups.size) },
+      { label: "可访问图片", value: String(images.filter((image) => Boolean(image.accessUrl)).length) },
+      { label: "主要来源", value: topSources.join("，") || UNKNOWN_TEXT }
+    ],
+    bullets: sampleBullets
+  };
+}
+
+function buildMultimodalMarkdown(images: RelatedImageProfile[]): string {
+  if (!images.length) {
+    return "";
+  }
+
+  const groups = new Map<string, RelatedImageProfile[]>();
+  for (const image of images) {
+    const key = preferText(image.sourceDocumentIdentifier, image.sourceDocumentName, image.identifier);
+    const existing = groups.get(key) ?? [];
+    existing.push(image);
+    groups.set(key, existing);
+  }
+
+  const lines: string[] = ["## 图像附录", ""];
+  let embeddedCount = 0;
+
+  for (const group of Array.from(groups.values()).slice(0, 3)) {
+    const first = group[0]!;
+    lines.push(`### ${preferText(first.sourceDocumentName, first.sourceDocumentIdentifier, "关联图像")}`);
+    lines.push("");
+    for (const image of group.slice(0, 2)) {
+      lines.push(`- ${preferText(image.name, image.identifier)}：${shortText(preferText(image.contentSummary, "未提供图像摘要"), 140)}`);
+      if (image.accessUrl && embeddedCount < 4) {
+        lines.push("");
+        lines.push(`![${preferText(image.name, image.identifier)}](${image.accessUrl})`);
+        lines.push("");
+        embeddedCount += 1;
+      }
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trim();
 }
 
 function buildResourceHighlights(profiles: ResourceProfile[], limit: number): string[] {
@@ -710,7 +1018,8 @@ function buildPreviewHighlights(profiles: ResourceProfile[], previewMap?: Resour
       continue;
     }
     const label = preferText(profile.name, profile.identifier, `候选资源${lines.length + 1}`);
-    const detail = preview.lines[0] ? `；${shortText(preview.lines[0], 120)}` : "";
+    const detailSource = preview.excerpt || preview.lines[0] || "";
+    const detail = detailSource ? `；${shortText(detailSource, 120)}` : "";
     lines.push(`${lines.length + 1}. ${label}：${preview.summary}${detail}`);
     if (lines.length >= limit) {
       break;
@@ -726,6 +1035,7 @@ function buildSummarySections(
   previewMap?: ResourcePreviewMap
 ): SummarySection[] {
   const landscape = buildLandscape(outputs);
+  const relatedImages = buildRelatedImageProfiles(outputs);
   const profiles = landscape.profiles;
   const searchableProfiles = profiles.filter((profile) => profile.searchScore !== null || profile.searchRank < Number.MAX_SAFE_INTEGER);
   const resolvableProfiles = profiles.filter((profile) => Boolean(profile.identifier));
@@ -781,6 +1091,11 @@ function buildSummarySections(
       title: "资源内容样本",
       lines: previewHighlights
     });
+  }
+
+  const relatedImageSection = buildRelatedImageSummarySection(relatedImages);
+  if (relatedImageSection) {
+    sections.push(relatedImageSection);
   }
 
   sections.push({
@@ -850,6 +1165,9 @@ function buildProfileBullets(profile: ResourceProfile, previewMap?: ResourcePrev
   const preview = profile.locator ? previewMap?.get(profile.locator) : undefined;
   if (preview) {
     bullets.push(`内容预览：${shortText(preview.summary, 120)}`);
+    if (preview.excerpt) {
+      bullets.push(shortText(preview.excerpt, 160));
+    }
     for (const line of preview.lines.slice(0, 2)) {
       bullets.push(shortText(line, 140));
     }
@@ -871,6 +1189,7 @@ function buildProfileBullets(profile: ResourceProfile, previewMap?: ResourcePrev
 
 function buildEvidenceCards(plan: ResearchPlan, outputs: Record<string, unknown>, previewMap?: ResourcePreviewMap): EvidenceCard[] {
   const landscape = buildLandscape(outputs);
+  const relatedImages = buildRelatedImageProfiles(outputs);
   const relevanceView = buildRelevanceView(landscape.profiles);
   const cards: EvidenceCard[] = [];
 
@@ -929,11 +1248,57 @@ function buildEvidenceCards(plan: ResearchPlan, outputs: Record<string, unknown>
     });
   }
 
+  const relatedImageCard = buildRelatedImageEvidenceCard(relatedImages);
+  if (relatedImageCard) {
+    cards.push(relatedImageCard);
+  }
+
   return cards.slice(0, 16);
 }
 
 function buildMarkdownReport(report: Omit<ResearchReport, "markdown">): string {
   const lines: string[] = [];
+
+  if (report.narrativeMarkdown?.trim()) {
+    lines.push(report.narrativeMarkdown.trim());
+    if (report.multimodalMarkdown?.trim()) {
+      lines.push("");
+      lines.push(report.multimodalMarkdown.trim());
+    }
+    lines.push("");
+    lines.push("## 附录：检索与证据概览");
+    lines.push("");
+    lines.push(`- 生成时间: ${report.generatedAt}`);
+    lines.push(`- 报告模板: ${report.templateTitle}`);
+    lines.push(`- 研究问题: ${report.question || "N/A"}`);
+    lines.push(`- 涉及标识数量: ${report.focusedIdentifiers.length}`);
+    lines.push("");
+
+    const appendixSections = report.summarySections.filter((section) =>
+      ["资源内容样本", "关联图像证据", "结论", "LLM 执行摘要"].includes(section.title)
+    );
+    for (const section of appendixSections) {
+      lines.push(`### ${section.title}`);
+      lines.push("");
+      for (const line of section.lines) {
+        lines.push(`- ${line}`);
+      }
+      lines.push("");
+    }
+
+    const appendixCards = report.evidenceCards.slice(0, 5);
+    if (appendixCards.length) {
+      lines.push("### 证据卡片摘录");
+      lines.push("");
+      for (const card of appendixCards) {
+        lines.push(`- ${card.title}${card.subtitle ? `：${card.subtitle}` : ""}`);
+      }
+      lines.push("");
+    }
+
+    return lines.join("\n");
+  }
+
   lines.push(`# ${report.title}`);
   lines.push("");
   lines.push(`- 生成时间: ${report.generatedAt}`);
@@ -947,6 +1312,10 @@ function buildMarkdownReport(report: Omit<ResearchReport, "markdown">): string {
     for (const line of section.lines) {
       lines.push(`- ${line}`);
     }
+    lines.push("");
+  }
+  if (report.multimodalMarkdown?.trim()) {
+    lines.push(report.multimodalMarkdown.trim());
     lines.push("");
   }
   if (report.evidenceCards.length) {
@@ -975,6 +1344,7 @@ export function buildResearchReport(
   outputs: Record<string, unknown>,
   previewMap?: ResourcePreviewMap
 ): ResearchReport {
+  const relatedImages = buildRelatedImageProfiles(outputs);
   const baseReport = {
     title: form.question
       ? `DRIS DeepResearch 研究报告 - ${shortText(form.question, 28)}`
@@ -984,7 +1354,9 @@ export function buildResearchReport(
     focusedIdentifiers: plan.focusedIdentifiers,
     summarySections: buildSummarySections(form, plan, outputs, previewMap),
     evidenceCards: buildEvidenceCards(plan, outputs, previewMap),
-    generatedAt: nowIso()
+    generatedAt: nowIso(),
+    narrativeMarkdown: "",
+    multimodalMarkdown: buildMultimodalMarkdown(relatedImages)
   };
 
   return {
@@ -1016,4 +1388,17 @@ export function prependExecutiveSummary(report: ResearchReport, lines: string[])
     markdown: buildMarkdownReport(withoutMarkdown)
   };
 }
+
+export function attachNarrativeMarkdown(report: ResearchReport, narrativeMarkdown: string): ResearchReport {
+  const nextReport: ResearchReport = {
+    ...report,
+    narrativeMarkdown: narrativeMarkdown.trim()
+  };
+  const { markdown: _ignored, ...withoutMarkdown } = nextReport;
+  return {
+    ...nextReport,
+    markdown: buildMarkdownReport(withoutMarkdown)
+  };
+}
+
 

@@ -1,0 +1,62 @@
+server:
+  port: 8302
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/dris_demo_water_node3?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: sbq254172
+  sql:
+    init:
+      mode: always
+      continue-on-error: true
+      encoding: UTF-8
+      schema-locations:
+        - classpath:sql/mysql/schema.sql
+        - classpath:sql/mysql/extension_schema.sql
+
+dris:
+  v2:
+    node-id: demo-water-institute
+    node-level: CITY
+    mode: jdbc
+    region-code: 1100
+    organization-code: JZAA
+    drirp-enabled: true
+    drirp-port: 19302
+    drirp-public-url: grpc://127.0.0.1:19302
+    parent-node-id: demo-water-academy
+    parent-drirp-url: grpc://127.0.0.1:19301
+    parent-region-code: 1100
+    parent-organization-code: WRAA
+    startup-hello-enabled: true
+    resolve-mode: recursive
+    resolve-max-hops: 8
+    resolve-timeout-ms: 5000
+    resolve-allow-parent-fallback: true
+    search-engine: elasticsearch
+    search-es-url: http://127.0.0.1:9200
+    search-es-index: dris_water_node3
+    search-es-connect-timeout-ms: 3000
+    search-es-request-timeout-ms: 5000
+    vector-auto-sync-enabled: false
+    topology-health:
+      enabled: true
+      initial-delay-ms: 5000
+      interval-ms: 15000
+      timeout-ms: 3000
+      offline-threshold-ms: 45000
+      offline-failure-threshold: 3
+      startup-hello-max-attempts: 3
+      startup-hello-retry-interval-ms: 2000
+      probe-children-enabled: true
+      notify-on-shutdown: true
+    storage-provider: cos
+    storage-endpoint: https://cos.ap-beijing.myqcloud.com
+    storage-region: ap-beijing
+    default-bucket: dris-repo-prod-1330585503
+    storage-public-base-url: ""
+    auth:
+      api-auth-required: false
+      write-permission-enabled: false

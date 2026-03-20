@@ -6,7 +6,8 @@ import { executeResearchPlan } from "../executor/runPlan.js";
 import { isLlmConfigured, resolveModel } from "../llm/openaiCompatibleClient.js";
 import { normalizeResearchForm } from "../planner/heuristicPlanner.js";
 import { createPlannedResearch } from "../planner/plannerService.js";
-import { buildResearchReport, prependExecutiveSummary } from "../report/buildReport.js";
+import { attachNarrativeMarkdown, buildResearchReport, prependExecutiveSummary } from "../report/buildReport.js";
+import { generateLongformNarrative } from "../report/llmNarrative.js";
 import { collectResourcePreviews } from "../report/resourcePreview.js";
 import { generateExecutiveSummary, generateExecutiveSummaryStream } from "../report/llmSummary.js";
 import type {
@@ -38,6 +39,32 @@ function buildSummaryStep(
     toolName: "llm_executive_summary",
     title: "Generate executive summary",
     description: "Use the configured LLM to compress the structured report into a short executive summary.",
+    status,
+    startedAt,
+    endedAt,
+    durationMs: Math.max(0, new Date(endedAt).getTime() - new Date(startedAt).getTime()),
+    summary: message,
+    error,
+    args: {
+      llmModel: llmModel || "inherit"
+    }
+  };
+}
+
+function buildNarrativeStep(
+  id: string,
+  status: ToolExecutionStep["status"],
+  llmModel: string,
+  message: string,
+  startedAt: string,
+  error?: string
+): ToolExecutionStep {
+  const endedAt = new Date().toISOString();
+  return {
+    id,
+    toolName: "llm_longform_report",
+    title: "Generate long-form report",
+    description: "Use the configured LLM to expand structured evidence into a formal markdown research report.",
     status,
     startedAt,
     endedAt,
@@ -185,6 +212,62 @@ async function runResearchInternal(
         await emitEvent(hooks, {
           type: "step",
           step: previewStep
+        });
+      }
+    }
+
+    if (isLlmConfigured(env, form.llmModel)) {
+      const narrativeStartedAt = new Date().toISOString();
+      const narrativeStepId = `llm-narrative-${Date.now()}`;
+      await emitEvent(hooks, {
+        type: "step",
+        step: {
+          id: narrativeStepId,
+          toolName: "llm_longform_report",
+          title: "Generate long-form report",
+          description: "Use the configured LLM to expand structured evidence into a formal markdown research report.",
+          status: "running",
+          startedAt: narrativeStartedAt,
+          args: {
+            llmModel: llmModel || "inherit"
+          }
+        }
+      });
+
+      try {
+        const narrativeMarkdown = await generateLongformNarrative(env, plan, report, executed.steps, form.llmModel);
+        report = attachNarrativeMarkdown(report, narrativeMarkdown);
+        const narrativeStep = buildNarrativeStep(
+          narrativeStepId,
+          "success",
+          llmModel,
+          `Generated long-form report with ${llmModel || "configured model"}.`,
+          narrativeStartedAt
+        );
+        executed.steps.push(narrativeStep);
+        await emitEvent(hooks, {
+          type: "step",
+          step: narrativeStep
+        });
+        if (streamingMode) {
+          await emitEvent(hooks, {
+            type: "report",
+            report
+          });
+        }
+      } catch (error) {
+        const narrativeStep = buildNarrativeStep(
+          narrativeStepId,
+          "error",
+          llmModel,
+          "Long-form report generation failed; kept structured report.",
+          narrativeStartedAt,
+          error instanceof Error ? error.message : String(error)
+        );
+        executed.steps.push(narrativeStep);
+        await emitEvent(hooks, {
+          type: "step",
+          step: narrativeStep
         });
       }
     }

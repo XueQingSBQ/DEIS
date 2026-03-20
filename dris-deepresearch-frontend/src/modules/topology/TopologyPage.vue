@@ -22,7 +22,7 @@
       <div class="metrics-strip graph-legend">
         <div class="metric-chip"><span>{{ texts.currentNode }}</span><strong>{{ currentNode.code }}</strong></div>
         <div class="metric-chip"><span>{{ texts.directNodes }}</span><strong>{{ descendants.length }}</strong></div>
-        <div class="metric-chip"><span>{{ texts.onlineNeighbors }}</span><strong>{{ statuses.filter((item) => item.direction === 'CHILD' && item.online).length }}</strong></div>
+        <div class="metric-chip"><span>{{ texts.onlineNeighbors }}</span><strong>{{ statuses.filter((item) => item.online).length }}</strong></div>
       </div>
     </section>
 
@@ -147,9 +147,9 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="route in routes" :key="route.targetCode">
+              <tr v-for="route in routeRows" :key="route.targetCode">
                 <td>{{ route.targetNodeName }}<br /><small>{{ route.targetCode }}</small></td>
-                <td>{{ route.nextHopCode }}<br /><small>{{ route.nextHopDrirpUrl }}</small></td>
+                <td>{{ route.nextHopName }}<br /><small>{{ route.nextHopCode }}</small><br /><small>{{ route.nextHopDrirpUrl }}</small></td>
                 <td>{{ route.hopCount }}</td>
               </tr>
             </tbody>
@@ -304,6 +304,26 @@ const selectableRegions = computed(() => {
   }
   return [] as RegionCatalogItem[];
 });
+const nodeOptionMap = computed(() => {
+  const map = new Map<string, { label: string; drirpPublicUrl: string }>();
+  for (const item of nodeOptions.value) {
+    map.set(item.code, {
+      label: item.label,
+      drirpPublicUrl: item.drirpPublicUrl
+    });
+  }
+  return map;
+});
+const routeRows = computed(() =>
+  routes.value.map((route) => {
+    const nextHop = nodeOptionMap.value.get(route.nextHopCode);
+    return {
+      ...route,
+      nextHopName: nextHop?.label || route.sourceNodeName || route.nextHopCode || '-',
+      nextHopDrirpUrl: route.nextHopDrirpUrl || nextHop?.drirpPublicUrl || '-'
+    };
+  })
+);
 const regionLocked = computed(() => currentNode.value.level === 'CITY');
 const selectedRegion = computed(() => resolveRegion(registerForm.regionCode));
 const selectedRegionName = computed(() => selectedRegion.value?.name ?? (registerForm.regionCode || '----'));
@@ -345,14 +365,14 @@ async function loadTopology(): Promise<void> {
   try {
     const [descResp, statusResp, routeResp] = await Promise.all([
       requestEnvelope<any[]>(`${currentBackendProxyBase.value}/api/v2/node/direct-descendants`),
-      requestEnvelope<any[]>(`${currentBackendProxyBase.value}/api/v2/node/adjacent/status`),
+      requestEnvelope<any[]>(`${currentBackendProxyBase.value}/api/v2/node/direct-descendants/status`),
       requestEnvelope<any[]>(`${currentBackendProxyBase.value}/api/v2/node/routes`)
     ]);
     descendants.value = descResp.data ?? [];
     statuses.value = statusResp.data ?? [];
     routes.value = routeResp.data ?? [];
     if (trackingChildCode.value) {
-      trackedStatus.value = statuses.value.find((item) => item.nodeCode === trackingChildCode.value && item.direction === 'CHILD') ?? null;
+      trackedStatus.value = statuses.value.find((item) => item.childCode === trackingChildCode.value) ?? null;
     }
   } finally {
     loading.value = false;

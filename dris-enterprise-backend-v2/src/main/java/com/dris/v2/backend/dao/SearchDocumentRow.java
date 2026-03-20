@@ -18,6 +18,7 @@ public class SearchDocumentRow {
     private String contentType;
     private String format;
     private String locator;
+    private String additionalAttributesText;
     private double score;
 
     public String getIdentifier() {
@@ -154,6 +155,14 @@ public class SearchDocumentRow {
 
     public void setLocator(String locator) {
         this.locator = locator;
+    }
+
+    public String getAdditionalAttributesText() {
+        return additionalAttributesText;
+    }
+
+    public void setAdditionalAttributesText(String additionalAttributesText) {
+        this.additionalAttributesText = additionalAttributesText;
     }
 
     public double getScore() {

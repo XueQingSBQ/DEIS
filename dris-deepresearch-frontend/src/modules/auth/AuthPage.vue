@@ -243,7 +243,7 @@ async function copyRegisterPayload(): Promise<void> {
 async function loadPublicKey(): Promise<void> {
   loading.value = true;
   try {
-    const response = await requestEnvelope<any>(`${authProxyBase}/auth/public-key`);
+    const response = await requestEnvelope<any>(`${authProxyBase.value}/auth/public-key`);
     publicKey.value = response.data;
   } catch (error) {
     statusMessage.value = error instanceof Error ? error.message : String(error);
@@ -256,7 +256,7 @@ async function registerUser(): Promise<void> {
   loading.value = true;
   statusMessage.value = '';
   try {
-    const response = await requestEnvelope<any>(`${authProxyBase}/auth/register`, {
+    const response = await requestEnvelope<any>(`${authProxyBase.value}/auth/register`, {
       method: 'POST',
       body: asJsonBody(registerForm)
     });
@@ -279,7 +279,7 @@ async function loginUser(): Promise<void> {
   loading.value = true;
   statusMessage.value = '';
   try {
-    const response = await requestEnvelope<any>(`${authProxyBase}/auth/login`, {
+    const response = await requestEnvelope<any>(`${authProxyBase.value}/auth/login`, {
       method: 'POST',
       body: asJsonBody(loginForm)
     });
@@ -302,7 +302,7 @@ async function loadUserInfo(): Promise<void> {
   }
   loading.value = true;
   try {
-    const response = await requestEnvelope<any>(`${authProxyBase}/auth/userinfo`);
+    const response = await requestEnvelope<any>(`${authProxyBase.value}/auth/userinfo`);
     updateAuthUserInfo(response.data as Record<string, unknown> | null);
     statusMessage.value = 'userinfo 已加载。';
   } catch (error) {

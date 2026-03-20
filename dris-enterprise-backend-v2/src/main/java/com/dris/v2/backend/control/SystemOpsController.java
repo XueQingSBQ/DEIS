@@ -1,6 +1,7 @@
 package com.dris.v2.backend.control;
 
 import com.dris.v2.backend.api.ApiResponses;
+import com.dris.v2.backend.contract.system.KeywordIndexSyncResult;
 import com.dris.v2.backend.dto.ApiResponse;
 import com.dris.v2.backend.service.SystemOpsService;
 import com.dris.v2.backend.contract.system.VectorSyncResult;
@@ -24,6 +25,16 @@ public class SystemOpsController {
     @PostMapping("/vector/sync")
     public ResponseEntity<ApiResponse<VectorSyncResult>> syncVector() {
         return ApiResponses.fromDris(service.syncVectorIndex());
+    }
+
+    @PostMapping("/search/index/init")
+    public ResponseEntity<ApiResponse<KeywordIndexSyncResult>> initSearchIndex() {
+        return ApiResponses.fromDris(service.initSearchIndex());
+    }
+
+    @PostMapping("/search/index/rebuild")
+    public ResponseEntity<ApiResponse<KeywordIndexSyncResult>> rebuildSearchIndex() {
+        return ApiResponses.fromDris(service.rebuildSearchIndex());
     }
 
     @GetMapping("/metrics")

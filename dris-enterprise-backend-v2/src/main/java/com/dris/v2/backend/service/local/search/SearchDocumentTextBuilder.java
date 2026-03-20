@@ -23,6 +23,7 @@ public class SearchDocumentTextBuilder {
         append(builder, row.getAccessMethod());
         append(builder, row.getContentType());
         append(builder, row.getFormat());
+        append(builder, row.getAdditionalAttributesText());
         return builder.toString();
     }
 
