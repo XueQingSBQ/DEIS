@@ -33,9 +33,7 @@ public class ElasticsearchKeywordSearchGateway implements KeywordSearchGateway {
     private static final List<String> SOURCE_FIELDS = Arrays.asList(
             "identifier", "name", "description", "applicationScenario", "owner",
             "industry", "dataCategory", "registrationType", "entityType",
-            "status", "updateTime", "componentType", "storageType",
-            "accessMethod", "contentType", "format", "locator",
-            "additionalAttributesText"
+            "theme", "region", "sourceFilename", "bizKeywordsText"
     );
 
     private final BackendV2Properties properties;
@@ -75,7 +73,6 @@ public class ElasticsearchKeywordSearchGateway implements KeywordSearchGateway {
         body.put("query", buildQuery(queryText, fields, filters));
         body.put("sort", Arrays.asList(
                 Collections.singletonMap("_score", "desc"),
-                Collections.singletonMap("updateTime", "desc"),
                 Collections.singletonMap("identifier", "asc")
         ));
         JsonNode root = exchangeJson(HttpMethod.POST, "/" + properties.getSearchEsIndex() + "/_search", body, true);
@@ -282,23 +279,18 @@ public class ElasticsearchKeywordSearchGateway implements KeywordSearchGateway {
 
         Map<String, Object> propertiesMap = new LinkedHashMap<String, Object>();
         propertiesMap.put("identifier", keywordField());
-        propertiesMap.put("status", keywordField());
-        propertiesMap.put("updateTime", keywordField());
-        propertiesMap.put("owner", keywordField());
+        propertiesMap.put("owner", textFieldWithKeyword());
         propertiesMap.put("industry", keywordField());
         propertiesMap.put("dataCategory", keywordField());
         propertiesMap.put("registrationType", keywordField());
         propertiesMap.put("entityType", keywordField());
-        propertiesMap.put("componentType", keywordField());
-        propertiesMap.put("storageType", keywordField());
-        propertiesMap.put("accessMethod", keywordField());
-        propertiesMap.put("contentType", keywordField());
-        propertiesMap.put("format", keywordField());
-        propertiesMap.put("locator", keywordField());
+        propertiesMap.put("theme", textFieldWithKeyword());
+        propertiesMap.put("region", textFieldWithKeyword());
+        propertiesMap.put("sourceFilename", textFieldWithKeyword());
+        propertiesMap.put("bizKeywordsText", textField());
         propertiesMap.put("name", textFieldWithKeyword());
         propertiesMap.put("description", textField());
         propertiesMap.put("applicationScenario", textField());
-        propertiesMap.put("additionalAttributesText", textField());
         propertiesMap.put("fullText", textField());
 
         Map<String, Object> mappings = new LinkedHashMap<String, Object>();
@@ -333,14 +325,30 @@ public class ElasticsearchKeywordSearchGateway implements KeywordSearchGateway {
         Map<String, Object> bool = new LinkedHashMap<String, Object>();
         List<Object> should = new ArrayList<Object>();
         should.add(Collections.singletonMap("multi_match", buildMultiMatch(queryText, fields)));
+        if (shouldUseField(fields, "identifier")) {
+            should.add(Collections.singletonMap("term", Collections.singletonMap("identifier", exactTermQuery(queryText, 12.0))));
+            should.add(Collections.singletonMap("prefix", Collections.singletonMap("identifier", exactTermQuery(queryText, 6.0))));
+        }
+        if (shouldUseField(fields, "theme")) {
+            should.add(Collections.singletonMap("match_phrase", Collections.singletonMap("theme", phraseQuery(queryText, 12.0))));
+        }
+        if (shouldUseField(fields, "region")) {
+            should.add(Collections.singletonMap("match_phrase", Collections.singletonMap("region", phraseQuery(queryText, 10.0))));
+        }
         if (shouldUseField(fields, "name")) {
             should.add(Collections.singletonMap("match_phrase", Collections.singletonMap("name", phraseQuery(queryText, 8.0))));
         }
+        if (shouldUseField(fields, "sourcefilename") || shouldUseField(fields, "source_filename")) {
+            should.add(Collections.singletonMap("match_phrase", Collections.singletonMap("sourceFilename", phraseQuery(queryText, 3.0))));
+        }
+        if (shouldUseField(fields, "bizkeywords") || shouldUseField(fields, "bizkeywordstext")) {
+            should.add(Collections.singletonMap("match_phrase", Collections.singletonMap("bizKeywordsText", phraseQuery(queryText, 6.0))));
+        }
         if (shouldUseField(fields, "description")) {
-            should.add(Collections.singletonMap("match_phrase", Collections.singletonMap("description", phraseQuery(queryText, 3.0))));
+            should.add(Collections.singletonMap("match_phrase", Collections.singletonMap("description", phraseQuery(queryText, 4.0))));
         }
         if (shouldUseField(fields, "applicationscenario") || shouldUseField(fields, "application_scenario")) {
-            should.add(Collections.singletonMap("match_phrase", Collections.singletonMap("applicationScenario", phraseQuery(queryText, 3.0))));
+            should.add(Collections.singletonMap("match_phrase", Collections.singletonMap("applicationScenario", phraseQuery(queryText, 4.0))));
         }
         bool.put("should", should);
         bool.put("minimum_should_match", Integer.valueOf(1));
@@ -367,6 +375,13 @@ public class ElasticsearchKeywordSearchGateway implements KeywordSearchGateway {
         return phrase;
     }
 
+    private Map<String, Object> exactTermQuery(String queryText, double boost) {
+        Map<String, Object> term = new LinkedHashMap<String, Object>();
+        term.put("value", queryText);
+        term.put("boost", Double.valueOf(boost));
+        return term;
+    }
+
     private List<String> resolveSearchFields(List<String> fields) {
         LinkedHashSet<String> resolved = new LinkedHashSet<String>();
         if (fields != null && !fields.isEmpty()) {
@@ -374,27 +389,42 @@ public class ElasticsearchKeywordSearchGateway implements KeywordSearchGateway {
                 String normalized = SearchTextSupport.safeLower(raw);
                 if ("name".equals(normalized)) {
                     resolved.add("name^6");
-                    resolved.add("fullText");
-                } else if ("description".equals(normalized)) {
-                    resolved.add("description^2");
-                } else if ("applicationscenario".equals(normalized) || "application_scenario".equals(normalized)) {
-                    resolved.add("applicationScenario^2");
-                } else if ("owner".equals(normalized)) {
-                    resolved.add("fullText");
+                } else if ("theme".equals(normalized)) {
+                    resolved.add("theme^10");
+                } else if ("region".equals(normalized)) {
+                    resolved.add("region^8");
                 } else if ("identifier".equals(normalized)) {
-                    resolved.add("identifier^3");
-                } else if ("additionalattributes".equals(normalized) || "additional_attributes".equals(normalized)) {
-                    resolved.add("additionalAttributesText^2");
+                    resolved.add("identifier^12");
+                } else if ("bizkeywords".equals(normalized) || "bizkeywordstext".equals(normalized)) {
+                    resolved.add("bizKeywordsText^5");
+                } else if ("description".equals(normalized)) {
+                    resolved.add("description^4");
+                } else if ("applicationscenario".equals(normalized) || "application_scenario".equals(normalized)) {
+                    resolved.add("applicationScenario^4");
+                } else if ("sourcefilename".equals(normalized) || "source_filename".equals(normalized)) {
+                    resolved.add("sourceFilename^2");
+                } else if ("owner".equals(normalized)) {
+                    resolved.add("owner^1");
+                } else if ("industry".equals(normalized)) {
+                    resolved.add("industry");
+                } else if ("datacategory".equals(normalized)) {
+                    resolved.add("dataCategory");
+                } else if ("registrationtype".equals(normalized)) {
+                    resolved.add("registrationType");
+                } else if ("entitytype".equals(normalized)) {
+                    resolved.add("entityType");
                 }
             }
         }
         if (resolved.isEmpty()) {
+            resolved.add("theme^10");
+            resolved.add("region^8");
             resolved.add("name^6");
-            resolved.add("description^2");
-            resolved.add("applicationScenario^2");
-            resolved.add("identifier^3");
-            resolved.add("additionalAttributesText^2");
-            resolved.add("fullText");
+            resolved.add("bizKeywordsText^5");
+            resolved.add("description^4");
+            resolved.add("applicationScenario^4");
+            resolved.add("sourceFilename^2");
+            resolved.add("owner^1");
         }
         return new ArrayList<String>(resolved);
     }
@@ -420,8 +450,8 @@ public class ElasticsearchKeywordSearchGateway implements KeywordSearchGateway {
         if ("industry".equals(normalized)) {
             return "industry";
         }
-        if ("status".equals(normalized)) {
-            return "status";
+        if ("identifier".equals(normalized)) {
+            return "identifier";
         }
         if ("entitytype".equals(normalized)) {
             return "entityType";
@@ -429,26 +459,8 @@ public class ElasticsearchKeywordSearchGateway implements KeywordSearchGateway {
         if ("datacategory".equals(normalized)) {
             return "dataCategory";
         }
-        if ("owner".equals(normalized)) {
-            return "owner";
-        }
         if ("registrationtype".equals(normalized)) {
             return "registrationType";
-        }
-        if ("componenttype".equals(normalized)) {
-            return "componentType";
-        }
-        if ("storagetype".equals(normalized)) {
-            return "storageType";
-        }
-        if ("accessmethod".equals(normalized)) {
-            return "accessMethod";
-        }
-        if ("contenttype".equals(normalized)) {
-            return "contentType";
-        }
-        if ("format".equals(normalized)) {
-            return "format";
         }
         return null;
     }
@@ -486,15 +498,10 @@ public class ElasticsearchKeywordSearchGateway implements KeywordSearchGateway {
             row.setDataCategory(source.path("dataCategory").asText(""));
             row.setRegistrationType(source.path("registrationType").asText(""));
             row.setEntityType(source.path("entityType").asText(""));
-            row.setStatus(source.path("status").asText(""));
-            row.setUpdateTime(source.path("updateTime").asText(""));
-            row.setComponentType(source.path("componentType").asText(""));
-            row.setStorageType(source.path("storageType").asText(""));
-            row.setAccessMethod(source.path("accessMethod").asText(""));
-            row.setContentType(source.path("contentType").asText(""));
-            row.setFormat(source.path("format").asText(""));
-            row.setLocator(source.path("locator").asText(""));
-            row.setAdditionalAttributesText(source.path("additionalAttributesText").asText(""));
+            row.setTheme(source.path("theme").asText(""));
+            row.setRegion(source.path("region").asText(""));
+            row.setSourceFilename(source.path("sourceFilename").asText(""));
+            row.setBizKeywordsText(source.path("bizKeywordsText").asText(""));
             row.setScore(hit.path("_score").asDouble(0.0));
             rows.add(row);
         }
@@ -512,15 +519,10 @@ public class ElasticsearchKeywordSearchGateway implements KeywordSearchGateway {
         source.put("dataCategory", safe(row.getDataCategory()));
         source.put("registrationType", safe(row.getRegistrationType()));
         source.put("entityType", safe(row.getEntityType()));
-        source.put("status", safe(row.getStatus()));
-        source.put("updateTime", safe(row.getUpdateTime()));
-        source.put("componentType", safe(row.getComponentType()));
-        source.put("storageType", safe(row.getStorageType()));
-        source.put("accessMethod", safe(row.getAccessMethod()));
-        source.put("contentType", safe(row.getContentType()));
-        source.put("format", safe(row.getFormat()));
-        source.put("locator", safe(row.getLocator()));
-        source.put("additionalAttributesText", safe(row.getAdditionalAttributesText()));
+        source.put("theme", safe(row.getTheme()));
+        source.put("region", safe(row.getRegion()));
+        source.put("sourceFilename", safe(row.getSourceFilename()));
+        source.put("bizKeywordsText", safe(row.getBizKeywordsText()));
         source.put("fullText", textBuilder.build(row));
         return source;
     }

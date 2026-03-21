@@ -5,7 +5,7 @@ New-Item -ItemType Directory -Force -Path (Split-Path -Parent $logPath) | Out-Nu
 "=== $(Get-Date -Format s) service bootstrap ===" | Tee-Object -FilePath $logPath -Append
 Set-Location $moduleDir
 $env:CORS_ORIGIN = '*'
-$env:PLANNER_MODE = 'auto'
+$env:PLANNER_MODE = 'heuristic'
 $env:MCP_SERVER_URL = 'http://127.0.0.1:38082/mcp'
 $env:HOST = '127.0.0.1'
 $env:PORT = '38083'

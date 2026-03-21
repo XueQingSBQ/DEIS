@@ -24,73 +24,44 @@ public class SearchScoreCalculator {
             return 0.0;
         }
         Set<String> fieldSet = resolveFieldSet(fields);
+        String theme = SearchTextSupport.safeLower(row.getTheme());
+        String region = SearchTextSupport.safeLower(row.getRegion());
         String name = SearchTextSupport.safeLower(row.getName());
+        String sourceFilename = SearchTextSupport.safeLower(row.getSourceFilename());
+        String bizKeywords = SearchTextSupport.safeLower(row.getBizKeywordsText());
         String desc = SearchTextSupport.safeLower(row.getDescription());
         String app = SearchTextSupport.safeLower(row.getApplicationScenario());
         String id = SearchTextSupport.safeLower(row.getIdentifier());
         String owner = SearchTextSupport.safeLower(row.getOwner());
-        String industry = SearchTextSupport.safeLower(row.getIndustry());
-        String dataCategory = SearchTextSupport.safeLower(row.getDataCategory());
-        String registrationType = SearchTextSupport.safeLower(row.getRegistrationType());
-        String entityType = SearchTextSupport.safeLower(row.getEntityType());
-        String componentType = SearchTextSupport.safeLower(row.getComponentType());
-        String storageType = SearchTextSupport.safeLower(row.getStorageType());
-        String accessMethod = SearchTextSupport.safeLower(row.getAccessMethod());
-        String contentType = SearchTextSupport.safeLower(row.getContentType());
-        String format = SearchTextSupport.safeLower(row.getFormat());
-        String locator = SearchTextSupport.safeLower(row.getLocator());
-        String additionalAttributes = SearchTextSupport.safeLower(row.getAdditionalAttributesText());
 
         double score = 0.0;
         for (String token : analysis.getRetrievalTokens()) {
+            if (fieldSet.contains("theme") && theme.contains(token)) {
+                score += 10.0;
+            }
+            if (fieldSet.contains("region") && region.contains(token)) {
+                score += 8.0;
+            }
             if (fieldSet.contains("name") && name.contains(token)) {
-                score += 3.0;
-            }
-            if (fieldSet.contains("description") && desc.contains(token)) {
-                score += 2.0;
-            }
-            if ((fieldSet.contains("applicationscenario") || fieldSet.contains("application_scenario")) && app.contains(token)) {
-                score += 1.0;
+                score += 6.0;
             }
             if (fieldSet.contains("identifier") && id.contains(token)) {
-                score += id.startsWith(token) ? 2.0 : 1.5;
+                score += id.startsWith(token) ? 12.0 : 8.0;
+            }
+            if ((fieldSet.contains("sourcefilename") || fieldSet.contains("source_filename")) && sourceFilename.contains(token)) {
+                score += 2.0;
+            }
+            if ((fieldSet.contains("bizkeywords") || fieldSet.contains("bizkeywordstext")) && bizKeywords.contains(token)) {
+                score += 5.0;
+            }
+            if (fieldSet.contains("description") && desc.contains(token)) {
+                score += 4.0;
+            }
+            if ((fieldSet.contains("applicationscenario") || fieldSet.contains("application_scenario")) && app.contains(token)) {
+                score += 4.0;
             }
             if (fieldSet.contains("owner") && owner.contains(token)) {
-                score += 1.2;
-            }
-            if (fieldSet.contains("industry") && industry.contains(token)) {
-                score += 1.2;
-            }
-            if (fieldSet.contains("datacategory") && dataCategory.contains(token)) {
-                score += 1.2;
-            }
-            if (fieldSet.contains("registrationtype") && registrationType.contains(token)) {
-                score += 1.2;
-            }
-            if (fieldSet.contains("entitytype") && entityType.contains(token)) {
                 score += 1.0;
-            }
-            if (fieldSet.contains("componenttype") && componentType.contains(token)) {
-                score += 1.3;
-            }
-            if (fieldSet.contains("storagetype") && storageType.contains(token)) {
-                score += 1.0;
-            }
-            if (fieldSet.contains("accessmethod") && accessMethod.contains(token)) {
-                score += 1.0;
-            }
-            if (fieldSet.contains("contenttype") && contentType.contains(token)) {
-                score += 1.0;
-            }
-            if (fieldSet.contains("format") && format.contains(token)) {
-                score += 1.0;
-            }
-            if (fieldSet.contains("locator") && locator.contains(token)) {
-                score += 0.8;
-            }
-            if ((fieldSet.contains("additionalattributes") || fieldSet.contains("additional_attributes"))
-                    && additionalAttributes.contains(token)) {
-                score += 1.6;
             }
         }
         return score;
@@ -136,6 +107,24 @@ public class SearchScoreCalculator {
         return Math.max(0.0, finalScore);
     }
 
+    public boolean hasPrimaryFieldMatch(SearchQueryAnalysis analysis, SearchDocumentRow row) {
+        if (analysis == null || row == null) {
+            return false;
+        }
+        String theme = SearchTextSupport.safeLower(row.getTheme());
+        String region = SearchTextSupport.safeLower(row.getRegion());
+        String name = SearchTextSupport.safeLower(row.getName());
+        for (String token : analysis.getRetrievalTokens()) {
+            if (SearchTextSupport.isBlank(token)) {
+                continue;
+            }
+            if (theme.contains(token) || region.contains(token) || name.contains(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private Set<String> resolveFieldSet(List<String> fields) {
         Set<String> fieldSet = new LinkedHashSet<String>();
         if (fields != null) {
@@ -150,10 +139,8 @@ public class SearchScoreCalculator {
             return fieldSet;
         }
         fieldSet.addAll(Arrays.asList(
-                "name", "description", "applicationscenario", "identifier",
-                "owner", "industry", "datacategory", "registrationtype", "entitytype",
-                "componenttype", "storagetype", "accessmethod", "contenttype", "format", "locator",
-                "additionalattributes"
+                "theme", "region", "name", "bizkeywords",
+                "description", "applicationscenario", "identifier", "sourcefilename", "owner"
         ));
         return fieldSet;
     }
@@ -174,25 +161,40 @@ public class SearchScoreCalculator {
             return 0.0;
         }
         String name = SearchTextSupport.safeLower(row.getName());
+        String theme = SearchTextSupport.safeLower(row.getTheme());
+        String region = SearchTextSupport.safeLower(row.getRegion());
         String desc = SearchTextSupport.safeLower(row.getDescription());
         String app = SearchTextSupport.safeLower(row.getApplicationScenario());
+        String keywords = SearchTextSupport.safeLower(row.getBizKeywordsText());
         String query = SearchTextSupport.safeLower(analysis.getOriginalQuery());
         double boost = 0.0;
         if (!SearchTextSupport.isBlank(query) && query.length() >= 2) {
-            if (name.contains(query)) {
+            if (theme.contains(query)) {
+                boost += 0.22;
+            } else if (region.contains(query)) {
                 boost += 0.18;
+            } else if (name.contains(query)) {
+                boost += 0.15;
+            } else if (keywords.contains(query)) {
+                boost += 0.10;
             } else if (desc.contains(query) || app.contains(query)) {
-                boost += 0.12;
+                boost += 0.08;
             }
         }
         if (!analysis.getCoreTokens().isEmpty()) {
-            if (SearchTextSupport.containsAllTokens(name, analysis.getCoreTokens())) {
+            if (SearchTextSupport.containsAllTokens(theme, analysis.getCoreTokens())) {
+                boost += 0.10;
+            } else if (SearchTextSupport.containsAllTokens(region, analysis.getCoreTokens())) {
                 boost += 0.08;
+            } else if (SearchTextSupport.containsAllTokens(name, analysis.getCoreTokens())) {
+                boost += 0.08;
+            } else if (SearchTextSupport.containsAllTokens(keywords, analysis.getCoreTokens())) {
+                boost += 0.06;
             } else if (SearchTextSupport.containsAllTokens(desc + " " + app, analysis.getCoreTokens())) {
                 boost += 0.05;
             }
         }
-        return Math.min(0.28, boost);
+        return Math.min(0.32, boost);
     }
 
     private double computeCompletenessBoost(SearchDocumentRow row) {
@@ -200,23 +202,20 @@ public class SearchScoreCalculator {
             return 0.0;
         }
         double boost = 0.0;
+        if (!SearchTextSupport.isBlank(row.getTheme())) {
+            boost += 0.03;
+        }
+        if (!SearchTextSupport.isBlank(row.getRegion())) {
+            boost += 0.03;
+        }
         if (!SearchTextSupport.isBlank(row.getName())) {
-            boost += 0.01;
+            boost += 0.02;
+        }
+        if (!SearchTextSupport.isBlank(row.getBizKeywordsText())) {
+            boost += 0.02;
         }
         if (!SearchTextSupport.isBlank(row.getDescription())) {
             boost += 0.02;
-        }
-        if (!SearchTextSupport.isBlank(row.getComponentType())) {
-            boost += 0.01;
-        }
-        if (!SearchTextSupport.isBlank(row.getAccessMethod())) {
-            boost += 0.01;
-        }
-        if (!SearchTextSupport.isBlank(row.getFormat()) || !SearchTextSupport.isBlank(row.getContentType())) {
-            boost += 0.02;
-        }
-        if (!SearchTextSupport.isBlank(row.getLocator())) {
-            boost += 0.03;
         }
         return boost;
     }

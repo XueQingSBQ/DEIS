@@ -75,6 +75,10 @@ final class SearchThemeSupport {
         if (row == null) {
             return "";
         }
+        String projected = canonicalTheme(row.getTheme());
+        if (!SearchTextSupport.isBlank(projected)) {
+            return projected;
+        }
         String attrs = SearchTextSupport.trim(row.getAdditionalAttributesText());
         Matcher matcher = COLUMN_PATTERN.matcher(attrs);
         if (matcher.find()) {

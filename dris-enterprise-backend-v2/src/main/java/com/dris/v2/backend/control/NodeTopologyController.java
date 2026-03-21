@@ -38,7 +38,7 @@ public class NodeTopologyController {
         return ApiResponses.ok(nodeTopologyService.listDirectDescendants());
     }
 
-    @GetMapping("/adjacent/status")
+    @GetMapping({"/adjacent/status", "/direct-descendants/status"})
     public ResponseEntity<ApiResponse<List<AdjacentNodeStatusView>>> adjacentNodeStatuses() {
         return ApiResponses.ok(nodeTopologyService.listAdjacentNodeStatuses());
     }

@@ -6,15 +6,21 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 public class DefaultSearchQueryAnalyzer implements SearchQueryAnalyzer {
+    private static final Pattern REGION_PATTERN = Pattern.compile("([\\p{IsHan}]{2,16}(?:省|市|县|区|乡|镇|村|新区|自治州|自治区|流域))");
+    private static final Pattern NODE_TARGET_PATTERN = Pattern.compile("([\\p{IsHan}A-Za-z0-9]{2,20}(?:部|院|所|局|厅|中心))");
+
     private final SearchSynonymRegistry synonymRegistry;
 
     public DefaultSearchQueryAnalyzer(SearchSynonymRegistry synonymRegistry) {
@@ -131,25 +137,66 @@ public class DefaultSearchQueryAnalyzer implements SearchQueryAnalyzer {
             }
         }
 
-        putIfAbsent(filters, "format", values, "csv", Arrays.asList("csv"));
-        putIfAbsent(filters, "format", values, "json", Arrays.asList("json"));
-        putIfAbsent(filters, "format", values, "xml", Arrays.asList("xml"));
-        putIfAbsent(filters, "format", values, "html", Arrays.asList("html"));
-        putIfAbsent(filters, "format", values, "pdf", Arrays.asList("pdf"));
-        putIfAbsent(filters, "format", values, "doc", Arrays.asList("doc", "docx", "document"));
-        putIfAbsent(filters, "format", values, "xls", Arrays.asList("xls", "xlsx", "spreadsheet", "excel"));
-
         putIfAbsent(filters, "entityType", values, "dataset", Arrays.asList("dataset", "data set"));
         putIfAbsent(filters, "entityType", values, "device", Arrays.asList("device"));
-        putIfAbsent(filters, "componentType", values, "service", Arrays.asList("api", "service"));
-        putIfAbsent(filters, "componentType", values, "tool", Arrays.asList("tool"));
-        putIfAbsent(filters, "componentType", values, "resource", Arrays.asList("resource"));
-
-        putIfAbsent(filters, "accessMethod", values, "download", Arrays.asList("download", "downloadable"));
-        putIfAbsent(filters, "storageType", values, "cos", Arrays.asList("cos", "qcloud"));
-        putIfAbsent(filters, "storageType", values, "s3", Arrays.asList("s3"));
-
         inferEntityTypeByIntent(filters, values);
+    }
+
+    private void inferThemeFilter(String originalQuery, Set<String> expandedTerms, Map<String, String> filters) {
+        if (hasFilter(filters, "theme")) {
+            return;
+        }
+        SearchQueryAnalysis analysis = new SearchQueryAnalysis(
+                originalQuery,
+                SearchTextSupport.joinTerms(expandedTerms),
+                Collections.<String>emptyList(),
+                Collections.<String>emptyList(),
+                new ArrayList<String>(expandedTerms),
+                Collections.<String, String>emptyMap()
+        );
+        List<String> themes = SearchThemeSupport.detectQueryThemes(analysis);
+        if (themes.size() == 1) {
+            filters.put("theme", themes.get(0));
+        }
+    }
+
+    private boolean hasFilter(Map<String, String> filters, String key) {
+        return filters.containsKey(key) && !SearchTextSupport.isBlank(filters.get(key));
+    }
+
+    private String detectRegion(String text) {
+        Matcher matcher = REGION_PATTERN.matcher(SearchTextSupport.trim(text));
+        if (matcher.find()) {
+            return normalizeRegionCandidate(matcher.group(1));
+        }
+        return "";
+    }
+
+    private String detectNodeTarget(String text) {
+        String normalized = SearchTextSupport.trim(text);
+        if (normalized.isEmpty()) {
+            return "";
+        }
+        for (String known : Arrays.asList("水利部", "水科院", "减灾所", "水利厅", "水利局", "流域管理局")) {
+            if (normalized.contains(known)) {
+                return known;
+            }
+        }
+        Matcher matcher = NODE_TARGET_PATTERN.matcher(normalized);
+        if (matcher.find()) {
+            return SearchTextSupport.trim(matcher.group(1));
+        }
+        return "";
+    }
+
+    private String normalizeRegionCandidate(String value) {
+        String normalized = SearchTextSupport.trim(value);
+        for (String prefix : Arrays.asList("请检索", "请查询", "请查找", "请搜索", "检索", "查询", "查找", "搜索", "关于", "围绕", "关注", "面向", "针对", "有关")) {
+            if (normalized.startsWith(prefix) && normalized.length() > prefix.length()) {
+                normalized = SearchTextSupport.trim(normalized.substring(prefix.length()));
+            }
+        }
+        return normalized;
     }
 
     private void putIfAbsent(Map<String, String> filters, String key, List<String> values, String targetValue, List<String> hints) {

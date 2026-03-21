@@ -17,10 +17,10 @@ public class SearchDocumentFilter {
         for (Map.Entry<String, String> entry : filters.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
-            if ("industry".equals(key) && !eqIgnoreCase(row.getIndustry(), value)) {
+            if ("identifier".equals(key) && !eqIgnoreCase(row.getIdentifier(), value)) {
                 return false;
             }
-            if ("status".equals(key) && !eqIgnoreCase(row.getStatus(), value)) {
+            if ("industry".equals(key) && !eqIgnoreCase(row.getIndustry(), value)) {
                 return false;
             }
             if ("entityType".equals(key) && !eqIgnoreCase(row.getEntityType(), value)) {
@@ -29,25 +29,7 @@ public class SearchDocumentFilter {
             if ("dataCategory".equals(key) && !eqIgnoreCase(row.getDataCategory(), value)) {
                 return false;
             }
-            if ("owner".equals(key) && !eqIgnoreCase(row.getOwner(), value)) {
-                return false;
-            }
             if ("registrationType".equals(key) && !eqIgnoreCase(row.getRegistrationType(), value)) {
-                return false;
-            }
-            if ("componentType".equals(key) && !eqIgnoreCase(row.getComponentType(), value)) {
-                return false;
-            }
-            if ("storageType".equals(key) && !eqIgnoreCase(row.getStorageType(), value)) {
-                return false;
-            }
-            if ("accessMethod".equals(key) && !eqIgnoreCase(row.getAccessMethod(), value)) {
-                return false;
-            }
-            if ("contentType".equals(key) && !eqIgnoreCase(row.getContentType(), value)) {
-                return false;
-            }
-            if ("format".equals(key) && !eqIgnoreCase(row.getFormat(), value)) {
                 return false;
             }
         }
