@@ -10,6 +10,7 @@ import type {
 import { extractEnvelope, McpResearchClient, summarizeToolResult } from "./mcpResearchClient.js";
 
 const IDENTIFIER_PATTERN = /[0-9A-Za-z]{16,}/;
+const RELATED_IMAGE_LIMIT = 24;
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -50,6 +51,17 @@ function readObject(value: unknown): Record<string, unknown> | undefined {
 
 function readString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function looksLikeIdentifier(value: string): boolean {
@@ -101,6 +113,218 @@ function readSearchItems(output: unknown): SearchItem[] {
   return items.filter((item) => item && typeof item === "object") as SearchItem[];
 }
 
+interface MetadataBatchItem {
+  identifier?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface SearchCandidate {
+  identifier: string;
+  name: string;
+  description: string;
+  entityType: string;
+  finalScore: number | null;
+}
+
+function readBatchMetadataItems(output: unknown): MetadataBatchItem[] {
+  const data = readObject(asEnvelope(output).data);
+  if (!data) {
+    return [];
+  }
+  const items = data.items;
+  return Array.isArray(items)
+    ? (items.filter((item) => item && typeof item === "object") as MetadataBatchItem[])
+    : [];
+}
+
+function readSingleMetadataItems(output: unknown): MetadataBatchItem[] {
+  const data = readObject(asEnvelope(output).data);
+  if (!data) {
+    return [];
+  }
+  const identifier = readString(data.identifier);
+  if (!identifier) {
+    return [];
+  }
+  return [
+    {
+      identifier,
+      metadata: data
+    }
+  ];
+}
+
+function readStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => readString(item)).filter(Boolean);
+  }
+  const single = readString(value);
+  if (!single) {
+    return [];
+  }
+  return single
+    .split(/[,\s]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function collectResolvedMetadataItems(outputs: Record<string, unknown>): MetadataBatchItem[] {
+  return [
+    ...((collectToolOutputs(outputs, "batch_resolve_metadata_distributed") ?? []).flatMap((output) =>
+      readBatchMetadataItems(output)
+    )),
+    ...((collectToolOutputs(outputs, "resolve_metadata") ?? []).flatMap((output) => readSingleMetadataItems(output)))
+  ];
+}
+
+function collectToolOutputs(outputs: Record<string, unknown>, toolName: string): unknown[] {
+  const value = outputs[toolName];
+  if (typeof value === "undefined") {
+    return [];
+  }
+  return Array.isArray(value) ? value : [value];
+}
+
+function extractRelatedImageIdentifiers(
+  outputs: Record<string, unknown>,
+  focusedIdentifiers: string[],
+  limit: number
+): string[] {
+  const focused = new Set(focusedIdentifiers);
+  const ordered = collectResolvedMetadataItems(outputs)
+    .filter((item) => {
+      const identifier = readString(item.identifier);
+      return identifier && focused.has(identifier);
+    })
+    .flatMap((item) => {
+      const metadata = readObject(item.metadata);
+      const additionalAttributes = readObject(metadata?.additionalAttributes);
+      return readStringArray(additionalAttributes?.derivedImageIdentifiers);
+    });
+  return unique(ordered).slice(0, limit);
+}
+
+function extractParentDocumentIdentifiers(
+  outputs: Record<string, unknown>,
+  focusedIdentifiers: string[],
+  limit: number
+): string[] {
+  const focused = new Set(focusedIdentifiers);
+  const ordered = collectResolvedMetadataItems(outputs)
+    .filter((item) => {
+      const identifier = readString(item.identifier);
+      return identifier && focused.has(identifier);
+    })
+    .flatMap((item) => {
+      const metadata = readObject(item.metadata);
+      const additionalAttributes = readObject(metadata?.additionalAttributes);
+      return readStringArray(additionalAttributes?.sourceDocumentIdentifier);
+    });
+  return unique(ordered).slice(0, limit);
+}
+
+function normalizeText(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function querySuggestsDocumentFocus(question: string): boolean {
+  const text = normalizeText(question);
+  if (!text) {
+    return false;
+  }
+  return [
+    "技术文件",
+    "规范",
+    "指南",
+    "要求",
+    "办法",
+    "方案",
+    "报告",
+    "文档",
+    "文件",
+    "标准"
+  ].some((hint) => text.includes(hint));
+}
+
+function toSearchCandidate(item: SearchItem): SearchCandidate | null {
+  const raw = item as unknown as Record<string, unknown>;
+  const identifier = extractIdentifierCandidate(raw);
+  if (!identifier) {
+    return null;
+  }
+  return {
+    identifier,
+    name: readString(item.name),
+    description: readString(item.description),
+    entityType: normalizeText(readString(item.entityType)),
+    finalScore: readNumber(item.finalScore)
+  };
+}
+
+function candidateLooksLikeDocument(candidate: SearchCandidate): boolean {
+  const entityType = candidate.entityType;
+  const text = normalizeText(`${candidate.name} ${candidate.description}`);
+  return entityType === "document"
+    || entityType === "file"
+    || entityType === "dataset"
+    || ["pdf", "doc", "docx", "指南", "技术要求", "方法", "规范", "文件"].some((hint) => text.includes(normalizeText(hint)));
+}
+
+function candidateLooksLikeImage(candidate: SearchCandidate): boolean {
+  const entityType = candidate.entityType;
+  const text = normalizeText(`${candidate.name} ${candidate.description}`);
+  return entityType === "image"
+    || ["附图", "图片", "图像", "示意图", "卫星图", "jpeg", "jpg", "png"].some((hint) => text.includes(normalizeText(hint)));
+}
+
+function filterSearchCandidates(question: string, searchItems: SearchItem[], limit: number): SearchCandidate[] {
+  const candidates = searchItems
+    .map((item) => toSearchCandidate(item))
+    .filter((item): item is SearchCandidate => Boolean(item));
+  if (!candidates.length) {
+    return [];
+  }
+
+  const documentFocused = querySuggestsDocumentFocus(question);
+  const topScore = candidates.reduce((max, item) => Math.max(max, item.finalScore ?? 0), 0);
+  const strongFloor = topScore > 0 ? Math.max(topScore * 0.45, 0.12) : 0.12;
+  const weakFloor = topScore > 0 ? Math.max(topScore * 0.2, 0.05) : 0.05;
+
+  const filtered = candidates.filter((candidate, index) => {
+    const score = candidate.finalScore ?? 0;
+    const isDocument = candidateLooksLikeDocument(candidate);
+    const isImage = candidateLooksLikeImage(candidate);
+
+    if (documentFocused) {
+      if (isDocument) {
+        return score >= weakFloor || index < 4;
+      }
+      if (isImage) {
+        return score >= strongFloor && index < 2;
+      }
+    }
+
+    if (score >= strongFloor) {
+      return true;
+    }
+    if (isDocument && score >= weakFloor) {
+      return true;
+    }
+    return index < 2 && score >= weakFloor;
+  });
+
+  const prioritized = filtered.sort((left, right) => {
+    const leftDocument = candidateLooksLikeDocument(left) ? 1 : 0;
+    const rightDocument = candidateLooksLikeDocument(right) ? 1 : 0;
+    if (leftDocument !== rightDocument && documentFocused) {
+      return rightDocument - leftDocument;
+    }
+    return (right.finalScore ?? 0) - (left.finalScore ?? 0);
+  });
+
+  return prioritized.slice(0, Math.max(1, limit));
+}
+
 function selectIdentifiers(explicitIdentifiers: string[], searchItems: SearchItem[], limit: number): string[] {
   const fromSearch = searchItems
     .map((item) => extractIdentifierCandidate(item as unknown as Record<string, unknown>))
@@ -149,7 +373,8 @@ async function executeTool(
   title: string,
   description: string,
   args: Record<string, unknown>,
-  hooks?: ResearchExecutionHooks
+  hooks?: ResearchExecutionHooks,
+  outputKey?: string
 ): Promise<unknown> {
   const step: ToolExecutionStep = {
     id: `${toolName}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -171,7 +396,7 @@ async function executeTool(
     step.durationMs = Math.round(performance.now() - started);
     step.result = result;
     step.summary = summarizeToolResult(toolName, result);
-    appendToolOutput(outputs, toolName, result);
+    appendToolOutput(outputs, outputKey ?? toolName, result);
     await emitStep(hooks, step);
     return result;
   } catch (error) {
@@ -182,6 +407,138 @@ async function executeTool(
     await emitStep(hooks, step);
     throw error;
   }
+}
+
+async function enrichRelatedImages(
+  client: McpResearchClient,
+  outputs: Record<string, unknown>,
+  steps: ToolExecutionStep[],
+  form: ResearchFormState,
+  focusedIdentifiers: string[],
+  availableTools: string[],
+  hooks?: ResearchExecutionHooks
+): Promise<void> {
+  const relatedImageIdentifiers = extractRelatedImageIdentifiers(outputs, focusedIdentifiers, RELATED_IMAGE_LIMIT);
+  if (!relatedImageIdentifiers.length) {
+    await appendSyntheticStep(
+      steps,
+      {
+        toolName: "related_image_resolution",
+        title: "Resolve related images",
+        description: "Collect image identifiers linked from parent document metadata for multimodal report generation.",
+        status: "skipped",
+        startedAt: nowIso(),
+        endedAt: nowIso(),
+        durationMs: 0,
+        summary: "No related image identifiers were exposed by the resolved parent metadata."
+      },
+      hooks
+    );
+    return;
+  }
+
+  await executeTool(
+    client,
+    outputs,
+    steps,
+    "batch_resolve_metadata_distributed",
+    "Resolve related image metadata",
+    "Resolve metadata for images linked from the focused parent documents.",
+    { identifiers: relatedImageIdentifiers },
+    hooks,
+    "related_image_batch_resolve_metadata"
+  );
+
+  await executeTool(
+    client,
+    outputs,
+    steps,
+    "batch_resolve_component_distributed",
+    "Resolve related image components",
+    "Resolve image components so the report can reference image resource locators and formats.",
+    { identifiers: relatedImageIdentifiers },
+    hooks,
+    "related_image_batch_resolve_component"
+  );
+
+  if (availableTools.includes("create_download_presign")) {
+    for (const identifier of relatedImageIdentifiers.slice(0, Math.min(form.limit * 2, 8))) {
+      await executeTool(
+        client,
+        outputs,
+        steps,
+        "create_download_presign",
+        `Create image download URL - ${identifier}`,
+        "Create a temporary download URL for a related image so the report can expose multimodal evidence.",
+        { identifier, expiresInSeconds: 900 },
+        hooks,
+        "related_image_create_download_presign"
+      );
+    }
+  }
+}
+
+async function enrichSourceDocumentsFromImages(
+  client: McpResearchClient,
+  outputs: Record<string, unknown>,
+  steps: ToolExecutionStep[],
+  form: ResearchFormState,
+  focusedIdentifiers: string[],
+  availableTools: string[],
+  hooks?: ResearchExecutionHooks
+): Promise<string[]> {
+  const parentIdentifiers = extractParentDocumentIdentifiers(outputs, focusedIdentifiers, Math.max(form.limit, 8));
+  if (!parentIdentifiers.length) {
+    return focusedIdentifiers;
+  }
+
+  await executeTool(
+    client,
+    outputs,
+    steps,
+    "batch_resolve_metadata_distributed",
+    "Resolve source document metadata",
+    "Resolve original source document metadata traced back from image hits.",
+    { identifiers: parentIdentifiers },
+    hooks
+  );
+  await executeTool(
+    client,
+    outputs,
+    steps,
+    "batch_resolve_object_distributed",
+    "Resolve source document objects",
+    "Resolve original source document digital objects traced back from image hits.",
+    { identifiers: parentIdentifiers },
+    hooks
+  );
+  await executeTool(
+    client,
+    outputs,
+    steps,
+    "batch_resolve_component_distributed",
+    "Resolve source document components",
+    "Resolve original source document resources traced back from image hits.",
+    { identifiers: parentIdentifiers },
+    hooks
+  );
+
+  if (availableTools.includes("create_download_presign")) {
+    for (const identifier of parentIdentifiers.slice(0, Math.min(form.limit, 4))) {
+      await executeTool(
+        client,
+        outputs,
+        steps,
+        "create_download_presign",
+        `Create source document download URL - ${identifier}`,
+        "Create a download URL for the original source document traced from an image hit.",
+        { identifier, expiresInSeconds: 900 },
+        hooks
+      );
+    }
+  }
+
+  return unique([...parentIdentifiers, ...focusedIdentifiers]);
 }
 
 export interface ExecutedResearchRun {
@@ -248,7 +605,36 @@ export async function executeResearchPlan(
     );
 
     const searchItems = readSearchItems(searchResult);
-    focusedIdentifiers = selectIdentifiers(plan.explicitIdentifiers, searchItems, Math.min(form.limit, 8));
+    const filteredCandidates = filterSearchCandidates(form.question, searchItems, Math.min(form.limit, 8));
+    focusedIdentifiers = selectIdentifiers(
+      plan.explicitIdentifiers,
+      filteredCandidates.map((candidate) => ({
+        identifier: candidate.identifier,
+        name: candidate.name,
+        description: candidate.description,
+        entityType: candidate.entityType,
+        finalScore: candidate.finalScore
+      })),
+      Math.min(form.limit, 8)
+    );
+
+    if (searchItems.length > filteredCandidates.length) {
+      await appendSyntheticStep(
+        steps,
+        {
+          toolName: "material_filter",
+          title: "Filter research materials",
+          description: "Keep only high-relevance search candidates before fetching full document contents for the LLM.",
+          status: "success",
+          startedAt: nowIso(),
+          endedAt: nowIso(),
+          durationMs: 0,
+          summary: `Filtered search candidates from ${searchItems.length} to ${filteredCandidates.length} before downstream document analysis.`
+        },
+        hooks
+      );
+    }
+
     if (!focusedIdentifiers.length) {
       await appendSyntheticStep(
         steps,
@@ -281,6 +667,15 @@ export async function executeResearchPlan(
         { identifiers: focusedIdentifiers },
         hooks
       );
+      focusedIdentifiers = await enrichSourceDocumentsFromImages(
+        client,
+        outputs,
+        steps,
+        form,
+        focusedIdentifiers,
+        availableTools,
+        hooks
+      );
       await executeTool(
         client,
         outputs,
@@ -302,6 +697,21 @@ export async function executeResearchPlan(
         hooks
       );
 
+      if (availableTools.includes("create_download_presign")) {
+        for (const identifier of focusedIdentifiers.slice(0, Math.min(form.limit, 6))) {
+          await executeTool(
+            client,
+            outputs,
+            steps,
+            "create_download_presign",
+            `Create download URL - ${identifier}`,
+            "Create a downloadable URL for the resolved resource so the research flow can inspect actual file contents.",
+            { identifier, expiresInSeconds: 900 },
+            hooks
+          );
+        }
+      }
+
       const auditIdentifiers = focusedIdentifiers.slice(0, 3);
       for (const identifier of auditIdentifiers) {
         await executeTool(
@@ -316,6 +726,7 @@ export async function executeResearchPlan(
         );
       }
       plan.auditIdentifiers = auditIdentifiers;
+      await enrichRelatedImages(client, outputs, steps, form, focusedIdentifiers, availableTools, hooks);
     } else {
       plan.auditIdentifiers = [];
     }
@@ -336,6 +747,28 @@ export async function executeResearchPlan(
       { identifier },
       hooks
     );
+    focusedIdentifiers = await enrichSourceDocumentsFromImages(
+      client,
+      outputs,
+      steps,
+      form,
+      focusedIdentifiers,
+      availableTools,
+      hooks
+    );
+    const tracedParentIdentifiers = focusedIdentifiers.filter((item) => item !== identifier);
+    if (tracedParentIdentifiers.length) {
+      await executeTool(
+        client,
+        outputs,
+        steps,
+        "batch_resolve_metadata_distributed",
+        "Resolve traced source document metadata",
+        "Resolve original source document metadata so the report can analyze the parent file, not just the image hit.",
+        { identifiers: tracedParentIdentifiers },
+        hooks
+      );
+    }
     await executeTool(
       client,
       outputs,
@@ -346,6 +779,18 @@ export async function executeResearchPlan(
       { identifier },
       hooks
     );
+    if (tracedParentIdentifiers.length) {
+      await executeTool(
+        client,
+        outputs,
+        steps,
+        "batch_resolve_object_distributed",
+        "Resolve traced source document objects",
+        "Resolve original source document digital objects traced from image hits.",
+        { identifiers: tracedParentIdentifiers },
+        hooks
+      );
+    }
     await executeTool(
       client,
       outputs,
@@ -356,6 +801,42 @@ export async function executeResearchPlan(
       { identifier },
       hooks
     );
+    if (tracedParentIdentifiers.length) {
+      await executeTool(
+        client,
+        outputs,
+        steps,
+        "batch_resolve_component_distributed",
+        "Resolve traced source document components",
+        "Resolve original source document resources traced from image hits.",
+        { identifiers: tracedParentIdentifiers },
+        hooks
+      );
+    }
+    if (availableTools.includes("create_download_presign")) {
+      await executeTool(
+        client,
+        outputs,
+        steps,
+        "create_download_presign",
+        "Create download URL",
+        "Create a downloadable URL for the resolved resource so the research flow can inspect actual file contents.",
+        { identifier, expiresInSeconds: 900 },
+        hooks
+      );
+      for (const parentIdentifier of tracedParentIdentifiers.slice(0, Math.min(form.limit, 4))) {
+        await executeTool(
+          client,
+          outputs,
+          steps,
+          "create_download_presign",
+          `Create source document download URL - ${parentIdentifier}`,
+          "Create a download URL for the original source document traced from an image hit.",
+          { identifier: parentIdentifier, expiresInSeconds: 900 },
+          hooks
+        );
+      }
+    }
     await executeTool(
       client,
       outputs,
@@ -366,7 +847,8 @@ export async function executeResearchPlan(
       buildAuditArgs(form, identifier),
       hooks
     );
-    plan.auditIdentifiers = [identifier];
+    plan.auditIdentifiers = [focusedIdentifiers[0] || identifier];
+    await enrichRelatedImages(client, outputs, steps, form, focusedIdentifiers, availableTools, hooks);
   }
 
   plan.focusedIdentifiers = focusedIdentifiers;

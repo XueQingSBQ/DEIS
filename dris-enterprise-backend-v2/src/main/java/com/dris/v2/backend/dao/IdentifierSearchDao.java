@@ -1,5 +1,6 @@
 package com.dris.v2.backend.dao;
 
+import com.dris.v2.backend.support.SearchAttributeProjectionSupport;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -41,7 +42,7 @@ public class IdentifierSearchDao {
         SearchPrefetchOrder prefetchOrder = buildSearchPrefetchOrder(safeTokens, dbFields);
         StringBuilder sql = new StringBuilder(
                 "SELECT m.identifier, m.name, m.description, m.application_scenario, m.owner, m.industry, m.data_category, " +
-                        "m.registration_type, m.entity_type, m.status, m.update_time, " +
+                        "m.registration_type, m.entity_type, m.status, m.update_time, m.additional_attributes, " +
                         "r.component_type, r.storage_type, r.access_method, r.content_type, r.format, r.locator, " +
                         prefetchOrder.expression + " AS prefetch_score " +
                         "FROM identifier_metadata m LEFT JOIN resource r ON r.identifier=m.identifier WHERE m.status!='deleted'"
@@ -83,24 +84,7 @@ public class IdentifierSearchDao {
 
         List<SearchDocumentRow> rows = jdbcTemplate.query(sql.toString(), params.toArray(), (rs, rowNum) -> {
             SearchDocumentRow row = mapRow(rs);
-            row.setScore(scoreFuzzy(
-                    safeTokens,
-                    row.getName(),
-                    row.getDescription(),
-                    row.getApplicationScenario(),
-                    row.getIdentifier(),
-                    row.getOwner(),
-                    row.getIndustry(),
-                    row.getDataCategory(),
-                    row.getRegistrationType(),
-                    row.getEntityType(),
-                    row.getComponentType(),
-                    row.getStorageType(),
-                    row.getAccessMethod(),
-                    row.getContentType(),
-                    row.getFormat(),
-                    row.getLocator()
-            ));
+            row.setScore(scoreFuzzy(safeTokens, row));
             return row;
         });
         List<SearchDocumentRow> matched = new ArrayList<SearchDocumentRow>();
@@ -126,7 +110,7 @@ public class IdentifierSearchDao {
             return out;
         }
         StringBuilder sql = new StringBuilder(
-                "SELECT m.identifier, m.name, m.description, m.application_scenario, m.owner, m.industry, m.data_category, m.registration_type, m.entity_type, m.status, m.update_time, r.component_type, r.storage_type, r.access_method, r.content_type, r.format, r.locator FROM identifier_metadata m LEFT JOIN resource r ON r.identifier=m.identifier WHERE m.status!='deleted' AND m.identifier IN ("
+                "SELECT m.identifier, m.name, m.description, m.application_scenario, m.owner, m.industry, m.data_category, m.registration_type, m.entity_type, m.status, m.update_time, m.additional_attributes, r.component_type, r.storage_type, r.access_method, r.content_type, r.format, r.locator FROM identifier_metadata m LEFT JOIN resource r ON r.identifier=m.identifier WHERE m.status!='deleted' AND m.identifier IN ("
         );
         for (int i = 0; i < identifiers.size(); i++) {
             if (i > 0) {
@@ -144,7 +128,7 @@ public class IdentifierSearchDao {
 
     public List<SearchDocumentRow> findAllActive() {
         return jdbcTemplate.query(
-                "SELECT m.identifier, m.name, m.description, m.application_scenario, m.owner, m.industry, m.data_category, m.registration_type, m.entity_type, m.status, m.update_time, r.component_type, r.storage_type, r.access_method, r.content_type, r.format, r.locator FROM identifier_metadata m LEFT JOIN resource r ON r.identifier=m.identifier WHERE m.status!='deleted' ORDER BY m.update_time DESC, m.identifier ASC",
+                "SELECT m.identifier, m.name, m.description, m.application_scenario, m.owner, m.industry, m.data_category, m.registration_type, m.entity_type, m.status, m.update_time, m.additional_attributes, r.component_type, r.storage_type, r.access_method, r.content_type, r.format, r.locator FROM identifier_metadata m LEFT JOIN resource r ON r.identifier=m.identifier WHERE m.status!='deleted' ORDER BY m.update_time DESC, m.identifier ASC",
                 (rs, rowNum) -> mapRow(rs)
         );
     }
@@ -168,6 +152,12 @@ public class IdentifierSearchDao {
         row.setContentType(rs.getString("content_type"));
         row.setFormat(rs.getString("format"));
         row.setLocator(rs.getString("locator"));
+        row.setAdditionalAttributesText(rs.getString("additional_attributes"));
+        row.setTheme(SearchAttributeProjectionSupport.extractTheme(row.getAdditionalAttributesText()));
+        row.setRegion(SearchAttributeProjectionSupport.extractRegion(row.getAdditionalAttributesText()));
+        row.setNodeTarget(SearchAttributeProjectionSupport.extractNodeTarget(row.getAdditionalAttributesText()));
+        row.setSourceFilename(SearchAttributeProjectionSupport.extractSourceFilename(row.getAdditionalAttributesText()));
+        row.setBizKeywordsText(SearchAttributeProjectionSupport.extractKeywordsText(row.getAdditionalAttributesText()));
         return row;
     }
 
@@ -188,21 +178,16 @@ public class IdentifierSearchDao {
             String like = "%" + normalized + "%";
             String prefix = normalized + "%";
             List<String> cases = new ArrayList<String>();
-            appendPrefetchCase(cases, params, dbFields, "m.name", 3.0, like);
-            appendPrefetchCase(cases, params, dbFields, "m.description", 2.0, like);
-            appendPrefetchCase(cases, params, dbFields, "m.application_scenario", 1.0, like);
-            appendIdentifierPrefetchCase(cases, params, dbFields, "m.identifier", 2.0, 1.5, like, prefix);
-            appendPrefetchCase(cases, params, dbFields, "m.owner", 1.2, like);
-            appendPrefetchCase(cases, params, dbFields, "m.industry", 1.2, like);
-            appendPrefetchCase(cases, params, dbFields, "m.data_category", 1.2, like);
-            appendPrefetchCase(cases, params, dbFields, "m.registration_type", 1.2, like);
-            appendPrefetchCase(cases, params, dbFields, "m.entity_type", 1.0, like);
-            appendPrefetchCase(cases, params, dbFields, "r.component_type", 1.3, like);
-            appendPrefetchCase(cases, params, dbFields, "r.storage_type", 1.0, like);
-            appendPrefetchCase(cases, params, dbFields, "r.access_method", 1.0, like);
-            appendPrefetchCase(cases, params, dbFields, "r.content_type", 1.0, like);
-            appendPrefetchCase(cases, params, dbFields, "r.format", 1.0, like);
-            appendPrefetchCase(cases, params, dbFields, "r.locator", 0.8, like);
+            appendPrefetchCase(cases, params, dbFields, "m.name", 6.0, like);
+            appendPrefetchCase(cases, params, dbFields, "m.description", 4.0, like);
+            appendPrefetchCase(cases, params, dbFields, "m.application_scenario", 4.0, like);
+            appendIdentifierPrefetchCase(cases, params, dbFields, "m.identifier", 12.0, 8.0, like, prefix);
+            appendPrefetchCase(cases, params, dbFields, "m.owner", 1.0, like);
+            appendPrefetchCase(cases, params, dbFields, "m.industry", 2.0, like);
+            appendPrefetchCase(cases, params, dbFields, "m.data_category", 2.0, like);
+            appendPrefetchCase(cases, params, dbFields, "m.registration_type", 2.0, like);
+            appendPrefetchCase(cases, params, dbFields, "m.entity_type", 2.0, like);
+            appendPrefetchCase(cases, params, dbFields, "m.additional_attributes", 8.0, like);
             if (cases.isEmpty()) {
                 continue;
             }
@@ -275,26 +260,14 @@ public class IdentifierSearchDao {
             }
             if ("industry".equals(key)) {
                 out.put("m.industry", value);
-            } else if ("status".equals(key)) {
-                out.put("m.status", value);
+            } else if ("identifier".equals(key)) {
+                out.put("m.identifier", value);
             } else if ("entityType".equals(key)) {
                 out.put("m.entity_type", value);
             } else if ("dataCategory".equals(key)) {
                 out.put("m.data_category", value);
-            } else if ("owner".equals(key)) {
-                out.put("m.owner", value);
             } else if ("registrationType".equals(key)) {
                 out.put("m.registration_type", value);
-            } else if ("componentType".equals(key)) {
-                out.put("r.component_type", value);
-            } else if ("storageType".equals(key)) {
-                out.put("r.storage_type", value);
-            } else if ("accessMethod".equals(key)) {
-                out.put("r.access_method", value);
-            } else if ("contentType".equals(key)) {
-                out.put("r.content_type", value);
-            } else if ("format".equals(key)) {
-                out.put("r.format", value);
             }
         }
         return out;
@@ -314,6 +287,10 @@ public class IdentifierSearchDao {
                     out.add("m.description");
                 } else if ("applicationscenario".equals(value) || "application_scenario".equals(value)) {
                     out.add("m.application_scenario");
+                } else if ("theme".equals(value) || "region".equals(value)
+                        || "bizkeywords".equals(value) || "bizkeywordstext".equals(value)
+                        || "sourcefilename".equals(value)) {
+                    out.add("m.additional_attributes");
                 } else if ("identifier".equals(value)) {
                     out.add("m.identifier");
                 } else if ("owner".equals(value)) {
@@ -326,22 +303,13 @@ public class IdentifierSearchDao {
                     out.add("m.registration_type");
                 } else if ("entitytype".equals(value)) {
                     out.add("m.entity_type");
-                } else if ("componenttype".equals(value)) {
-                    out.add("r.component_type");
-                } else if ("storagetype".equals(value)) {
-                    out.add("r.storage_type");
-                } else if ("accessmethod".equals(value)) {
-                    out.add("r.access_method");
-                } else if ("contenttype".equals(value)) {
-                    out.add("r.content_type");
-                } else if ("format".equals(value)) {
-                    out.add("r.format");
-                } else if ("locator".equals(value)) {
-                    out.add("r.locator");
+                } else if ("additionalattributes".equals(value) || "additional_attributes".equals(value)) {
+                    out.add("m.additional_attributes");
                 }
             }
         }
         if (out.isEmpty()) {
+            out.add("m.additional_attributes");
             out.add("m.name");
             out.add("m.description");
             out.add("m.application_scenario");
@@ -351,52 +319,23 @@ public class IdentifierSearchDao {
             out.add("m.data_category");
             out.add("m.registration_type");
             out.add("m.entity_type");
-            out.add("r.component_type");
-            out.add("r.storage_type");
-            out.add("r.access_method");
-            out.add("r.content_type");
-            out.add("r.format");
-            out.add("r.locator");
         }
         return out;
     }
 
-    private double scoreFuzzy(
-            List<String> tokens,
-            String name,
-            String desc,
-            String app,
-            String identifier,
-            String owner,
-            String industry,
-            String dataCategory,
-            String registrationType,
-            String entityType,
-            String componentType,
-            String storageType,
-            String accessMethod,
-            String contentType,
-            String format,
-            String locator
-    ) {
-        if (tokens == null || tokens.isEmpty()) {
+    private double scoreFuzzy(List<String> tokens, SearchDocumentRow row) {
+        if (row == null || tokens == null || tokens.isEmpty()) {
             return 0.0;
         }
-        String n = lower(name);
-        String d = lower(desc);
-        String a = lower(app);
-        String id = lower(identifier);
-        String o = lower(owner);
-        String ind = lower(industry);
-        String cat = lower(dataCategory);
-        String reg = lower(registrationType);
-        String et = lower(entityType);
-        String ct = lower(componentType);
-        String st = lower(storageType);
-        String am = lower(accessMethod);
-        String ctt = lower(contentType);
-        String f = lower(format);
-        String loc = lower(locator);
+        String id = lower(row.getIdentifier());
+        String theme = lower(row.getTheme());
+        String region = lower(row.getRegion());
+        String name = lower(row.getName());
+        String keywords = lower(row.getBizKeywordsText());
+        String desc = lower(row.getDescription());
+        String app = lower(row.getApplicationScenario());
+        String filename = lower(row.getSourceFilename());
+        String owner = lower(row.getOwner());
         double raw = 0.0;
         for (String token : tokens) {
             if (token == null) {
@@ -404,54 +343,36 @@ public class IdentifierSearchDao {
             }
             String value = token.toLowerCase(Locale.ROOT);
             double tokenScore = 0.0;
-            if (!n.isEmpty() && n.contains(value)) {
-                tokenScore = Math.max(tokenScore, 3.0);
+            if (!theme.isEmpty() && theme.contains(value)) {
+                tokenScore = Math.max(tokenScore, 10.0);
             }
-            if (!d.isEmpty() && d.contains(value)) {
-                tokenScore = Math.max(tokenScore, 2.0);
+            if (!region.isEmpty() && region.contains(value)) {
+                tokenScore = Math.max(tokenScore, 8.0);
             }
-            if (!a.isEmpty() && a.contains(value)) {
-                tokenScore = Math.max(tokenScore, 1.0);
+            if (!name.isEmpty() && name.contains(value)) {
+                tokenScore = Math.max(tokenScore, 6.0);
             }
             if (!id.isEmpty() && id.contains(value)) {
-                tokenScore = Math.max(tokenScore, id.startsWith(value) ? 2.0 : 1.5);
+                tokenScore = Math.max(tokenScore, id.startsWith(value) ? 12.0 : 8.0);
             }
-            if (!o.isEmpty() && o.contains(value)) {
-                tokenScore = Math.max(tokenScore, 1.2);
+            if (!keywords.isEmpty() && keywords.contains(value)) {
+                tokenScore = Math.max(tokenScore, 5.0);
             }
-            if (!ind.isEmpty() && ind.contains(value)) {
-                tokenScore = Math.max(tokenScore, 1.2);
+            if (!desc.isEmpty() && desc.contains(value)) {
+                tokenScore = Math.max(tokenScore, 4.0);
             }
-            if (!cat.isEmpty() && cat.contains(value)) {
-                tokenScore = Math.max(tokenScore, 1.2);
+            if (!app.isEmpty() && app.contains(value)) {
+                tokenScore = Math.max(tokenScore, 4.0);
             }
-            if (!reg.isEmpty() && reg.contains(value)) {
-                tokenScore = Math.max(tokenScore, 1.2);
+            if (!filename.isEmpty() && filename.contains(value)) {
+                tokenScore = Math.max(tokenScore, 2.0);
             }
-            if (!et.isEmpty() && et.contains(value)) {
+            if (!owner.isEmpty() && owner.contains(value)) {
                 tokenScore = Math.max(tokenScore, 1.0);
-            }
-            if (!ct.isEmpty() && ct.contains(value)) {
-                tokenScore = Math.max(tokenScore, 1.3);
-            }
-            if (!st.isEmpty() && st.contains(value)) {
-                tokenScore = Math.max(tokenScore, 1.0);
-            }
-            if (!am.isEmpty() && am.contains(value)) {
-                tokenScore = Math.max(tokenScore, 1.0);
-            }
-            if (!ctt.isEmpty() && ctt.contains(value)) {
-                tokenScore = Math.max(tokenScore, 1.0);
-            }
-            if (!f.isEmpty() && f.contains(value)) {
-                tokenScore = Math.max(tokenScore, 1.0);
-            }
-            if (!loc.isEmpty() && loc.contains(value)) {
-                tokenScore = Math.max(tokenScore, 0.8);
             }
             raw += tokenScore;
         }
-        double maxPossible = tokens.size() * 3.0;
+        double maxPossible = tokens.size() * 10.0;
         return maxPossible == 0 ? 0.0 : raw / maxPossible;
     }
 

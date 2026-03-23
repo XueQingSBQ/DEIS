@@ -169,8 +169,8 @@ function buildSearchArgs(form: ResearchFormState): Record<string, unknown> {
     ttl: clamp(form.ttl, 1, 16),
     maxFanout: clamp(form.maxFanout, 1, 64),
     perNodeLimit: clamp(form.perNodeLimit, 1, 100),
-    globalDeadlineMs: clamp(form.globalDeadlineMs, 500, 20000),
-    hopTimeoutMs: clamp(form.hopTimeoutMs, 200, 10000),
+    globalDeadlineMs: clamp(form.globalDeadlineMs, 500, 120000),
+    hopTimeoutMs: clamp(form.hopTimeoutMs, 200, 30000),
     traceId: `deepresearch-${Date.now()}`
   };
 }

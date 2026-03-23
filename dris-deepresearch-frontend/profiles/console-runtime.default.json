@@ -1,0 +1,72 @@
+{
+  "profileId": "default-local-6nodes",
+  "authProxyBase": "/proxy/auth",
+  "authProxyTarget": "http://127.0.0.1:8290",
+  "services": {
+    "mcpUrl": "http://127.0.0.1:38082/mcp",
+    "orchestratorUrl": "http://127.0.0.1:38083",
+    "authBaseUrl": "http://127.0.0.1:8290"
+  },
+  "defaultSelectedNodeCode": "1100RTAA",
+  "nodes": [
+    {
+      "code": "1100RTAA",
+      "label": "\u56fd\u5bb6\u6839\u8282\u70b9",
+      "level": "COUNTRY",
+      "backendBaseUrl": "http://127.0.0.1:8200",
+      "proxyBase": "/proxy/node/root",
+      "proxyTarget": "http://127.0.0.1:8200",
+      "drirpPublicUrl": "grpc://127.0.0.1:19200"
+    },
+    {
+      "code": "1100PRAA",
+      "label": "\u7701\u7ea7\u8282\u70b9 A",
+      "level": "PROVINCE",
+      "backendBaseUrl": "http://127.0.0.1:8201",
+      "proxyBase": "/proxy/node/proa",
+      "proxyTarget": "http://127.0.0.1:8201",
+      "drirpPublicUrl": "grpc://127.0.0.1:19201",
+      "parentCode": "1100RTAA"
+    },
+    {
+      "code": "1100CTAA",
+      "label": "\u5e02\u7ea7\u8282\u70b9 A",
+      "level": "CITY",
+      "backendBaseUrl": "http://127.0.0.1:8202",
+      "proxyBase": "/proxy/node/cita",
+      "proxyTarget": "http://127.0.0.1:8202",
+      "drirpPublicUrl": "grpc://127.0.0.1:19202",
+      "parentCode": "1100PRAA"
+    },
+    {
+      "code": "1100CNTA",
+      "label": "\u53bf\u7ea7\u8282\u70b9 A",
+      "level": "COUNTY",
+      "backendBaseUrl": "http://127.0.0.1:8203",
+      "proxyBase": "/proxy/node/cnta",
+      "proxyTarget": "http://127.0.0.1:8203",
+      "drirpPublicUrl": "grpc://127.0.0.1:19203",
+      "parentCode": "1100CTAA"
+    },
+    {
+      "code": "1100CTAB",
+      "label": "\u5e02\u7ea7\u8282\u70b9 B",
+      "level": "CITY",
+      "backendBaseUrl": "http://127.0.0.1:8204",
+      "proxyBase": "/proxy/node/citb",
+      "proxyTarget": "http://127.0.0.1:8204",
+      "drirpPublicUrl": "grpc://127.0.0.1:19204",
+      "parentCode": "1100PRAA"
+    },
+    {
+      "code": "1100CNTB",
+      "label": "\u53bf\u7ea7\u8282\u70b9 B",
+      "level": "COUNTY",
+      "backendBaseUrl": "http://127.0.0.1:8205",
+      "proxyBase": "/proxy/node/cntb",
+      "proxyTarget": "http://127.0.0.1:8205",
+      "drirpPublicUrl": "grpc://127.0.0.1:19205",
+      "parentCode": "1100CTAB"
+    }
+  ]
+}

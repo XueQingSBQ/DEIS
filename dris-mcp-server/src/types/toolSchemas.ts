@@ -40,3 +40,8 @@ export const auditQueryInputSchema = {
   size: z.number().int().min(1).max(100).optional().default(20).describe("Page size")
 };
 
+export const downloadPresignInputSchema = {
+  identifier: identifierSchema,
+  expiresInSeconds: z.number().int().min(60).max(3600).optional().default(600).describe("Presigned URL expiration in seconds")
+};
+

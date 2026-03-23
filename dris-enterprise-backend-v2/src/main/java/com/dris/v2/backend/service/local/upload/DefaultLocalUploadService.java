@@ -425,7 +425,26 @@ public class DefaultLocalUploadService implements LocalUploadService {
     private String makeObjectKey(String identifier, String componentType, String uploadId, String filename, String format) {
         String suffix = "tool".equals(componentType) ? "tool" : "resource";
         String extension = resolveObjectExtension(filename, format);
-        return "identifiers/" + identifier + "/" + suffix + "/" + uploadId + extension;
+        return "institutions/"
+                + currentInstitutionFolder()
+                + "/identifiers/"
+                + sanitizePathSegment(identifier)
+                + "/"
+                + suffix
+                + "/"
+                + sanitizePathSegment(uploadId)
+                + extension;
+    }
+
+    private String currentInstitutionFolder() {
+        String regionCode = sanitizePathSegment(safe(properties == null ? "" : properties.getRegionCode()));
+        String organizationCode = sanitizePathSegment(safe(properties == null ? "" : properties.getOrganizationCode()));
+        String combined = regionCode + organizationCode;
+        if (!isBlank(combined)) {
+            return combined;
+        }
+        String nodeId = sanitizePathSegment(safe(properties == null ? "" : properties.getNodeId()));
+        return isBlank(nodeId) ? "node-local" : nodeId;
     }
 
     private String resolveObjectExtension(String filename, String format) {
@@ -472,6 +491,31 @@ public class DefaultLocalUploadService implements LocalUploadService {
             }
         }
         return builder.toString();
+    }
+
+    private String sanitizePathSegment(String value) {
+        String input = safe(value);
+        if (isBlank(input)) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < input.length(); i++) {
+            char ch = input.charAt(i);
+            if ((ch >= 'a' && ch <= 'z')
+                    || (ch >= 'A' && ch <= 'Z')
+                    || (ch >= '0' && ch <= '9')
+                    || ch == '-'
+                    || ch == '_') {
+                builder.append(ch);
+            } else {
+                builder.append('_');
+            }
+        }
+        String output = builder.toString();
+        while (output.contains("__")) {
+            output = output.replace("__", "_");
+        }
+        return output;
     }
 
     private String resolveDownloadFilename(DigitalObject object, com.dris.sdk.next.domain.Resource resource) {

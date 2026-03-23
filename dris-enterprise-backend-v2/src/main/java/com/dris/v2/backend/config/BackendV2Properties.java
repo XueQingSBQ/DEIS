@@ -47,6 +47,13 @@ public class BackendV2Properties {
     private int searchCircuitFailureThreshold = 10;
     private long searchCircuitOpenMs = 10000L;
     private int searchCircuitHalfOpenPermits = 1;
+    private String searchEngine = "mysql_like";
+    private String searchEsUrl = "";
+    private String searchEsIndex = "";
+    private String searchEsUsername = "";
+    private String searchEsPassword = "";
+    private int searchEsConnectTimeoutMs = 3000;
+    private int searchEsRequestTimeoutMs = 5000;
     private boolean vectorAutoSyncEnabled = true;
     private long vectorAutoSyncInitialDelayMs = 5000L;
     private long vectorAutoSyncIntervalMs = 3000L;
@@ -416,6 +423,62 @@ public class BackendV2Properties {
 
     public void setSearchCircuitHalfOpenPermits(int searchCircuitHalfOpenPermits) {
         this.searchCircuitHalfOpenPermits = searchCircuitHalfOpenPermits;
+    }
+
+    public String getSearchEngine() {
+        return searchEngine;
+    }
+
+    public void setSearchEngine(String searchEngine) {
+        this.searchEngine = searchEngine;
+    }
+
+    public String getSearchEsUrl() {
+        return searchEsUrl;
+    }
+
+    public void setSearchEsUrl(String searchEsUrl) {
+        this.searchEsUrl = searchEsUrl;
+    }
+
+    public String getSearchEsIndex() {
+        return searchEsIndex;
+    }
+
+    public void setSearchEsIndex(String searchEsIndex) {
+        this.searchEsIndex = searchEsIndex;
+    }
+
+    public String getSearchEsUsername() {
+        return searchEsUsername;
+    }
+
+    public void setSearchEsUsername(String searchEsUsername) {
+        this.searchEsUsername = searchEsUsername;
+    }
+
+    public String getSearchEsPassword() {
+        return searchEsPassword;
+    }
+
+    public void setSearchEsPassword(String searchEsPassword) {
+        this.searchEsPassword = searchEsPassword;
+    }
+
+    public int getSearchEsConnectTimeoutMs() {
+        return searchEsConnectTimeoutMs;
+    }
+
+    public void setSearchEsConnectTimeoutMs(int searchEsConnectTimeoutMs) {
+        this.searchEsConnectTimeoutMs = searchEsConnectTimeoutMs;
+    }
+
+    public int getSearchEsRequestTimeoutMs() {
+        return searchEsRequestTimeoutMs;
+    }
+
+    public void setSearchEsRequestTimeoutMs(int searchEsRequestTimeoutMs) {
+        this.searchEsRequestTimeoutMs = searchEsRequestTimeoutMs;
     }
 
     public boolean isVectorAutoSyncEnabled() {

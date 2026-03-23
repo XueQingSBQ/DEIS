@@ -8,8 +8,10 @@ function buildSummaryMessages(
   steps: ToolExecutionStep[]
 ): Array<{ role: "system" | "user"; content: string }> {
   const systemPrompt = [
-    "You summarize bounded research results for a DRIS DeepResearch system.",
-    "Focus on topic-relevant data resources, cross-node coverage, usability, and governance evidence.",
+    "You summarize domain research results, not platform operation status.",
+    "Focus on the substantive contents of the retrieved files: what they discuss, how they relate, and what conclusions can be drawn.",
+    "Do not center the summary on identifiers, routing, node topology, audit logs, or system governance.",
+    "You may mention system evidence only briefly if it affects confidence or completeness.",
     "Write a concise executive summary as 2 to 5 bullet lines.",
     "Each line must start with '- ' and stay factual.",
     "Respond in the same language as the user's question when possible; otherwise default to Simplified Chinese.",

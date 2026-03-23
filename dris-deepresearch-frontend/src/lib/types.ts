@@ -75,6 +75,7 @@ export interface ResearchReport {
   summarySections: SummarySection[];
   evidenceCards: EvidenceCard[];
   generatedAt: string;
+  narrativeMarkdown?: string;
   markdown: string;
 }
 

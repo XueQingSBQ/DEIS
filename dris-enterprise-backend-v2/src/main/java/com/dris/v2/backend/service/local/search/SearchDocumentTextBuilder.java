@@ -11,6 +11,9 @@ public class SearchDocumentTextBuilder {
         }
         StringBuilder builder = new StringBuilder();
         append(builder, row.getName());
+        append(builder, row.getTheme());
+        append(builder, row.getRegion());
+        append(builder, row.getBizKeywordsText());
         append(builder, row.getDescription());
         append(builder, row.getApplicationScenario());
         append(builder, row.getOwner());
@@ -18,11 +21,7 @@ public class SearchDocumentTextBuilder {
         append(builder, row.getDataCategory());
         append(builder, row.getRegistrationType());
         append(builder, row.getEntityType());
-        append(builder, row.getComponentType());
-        append(builder, row.getStorageType());
-        append(builder, row.getAccessMethod());
-        append(builder, row.getContentType());
-        append(builder, row.getFormat());
+        append(builder, row.getSourceFilename());
         return builder.toString();
     }
 

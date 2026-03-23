@@ -160,12 +160,12 @@ async function loadOverview(): Promise<void> {
   loading.value = true;
   try {
     const [statusResp, routeResp, metricResp, mcpResp, orchestratorResp, authResp] = await Promise.all([
-      requestEnvelope<any[]>(`${currentBackendProxyBase.value}/api/v2/node/adjacent/status`),
+      requestEnvelope<any[]>(`${currentBackendProxyBase.value}/api/v2/node/direct-descendants/status`),
       requestEnvelope<any[]>(`${currentBackendProxyBase.value}/api/v2/node/routes`),
       requestEnvelope<Record<string, Record<string, number>>>(`${currentBackendProxyBase.value}/api/v2/ops/metrics`),
       requestJson<any>(`${new URL("/health", state.mcpUrl.replace(/\/mcp$/, "/")).toString()}`),
       requestJson<any>(`${state.orchestratorUrl.replace(/\/$/, "")}/health`),
-      requestEnvelope<any>(`${authProxyBase}/auth/public-key`)
+      requestEnvelope<any>(`${authProxyBase.value}/auth/public-key`)
     ]);
     statuses.value = statusResp.data ?? [];
     routes.value = routeResp.data ?? [];

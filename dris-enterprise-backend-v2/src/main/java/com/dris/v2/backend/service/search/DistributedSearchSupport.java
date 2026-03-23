@@ -41,7 +41,11 @@ import java.util.concurrent.Executor;
 
 public class DistributedSearchSupport {
     private static final Logger log = LoggerFactory.getLogger(DistributedSearchSupport.class);
-    private static final double RRF_K = 60.0;
+    private static final double GLOBAL_MIN_RETURN_SCORE = 0.18;
+    private static final double GLOBAL_TOP_SCORE_RATIO = 0.60;
+    private static final double GLOBAL_CLIFF_RATIO = 0.62;
+    private static final double GLOBAL_DUPLICATE_BOOST_STEP = 0.01;
+    private static final double GLOBAL_DUPLICATE_BOOST_CAP = 0.03;
 
     private final LocalSearchService localSearchService;
     private final BackendV2Properties properties;
@@ -464,8 +468,11 @@ public class DistributedSearchSupport {
         payload.setMaxFanout(Integer.valueOf(options.maxFanout));
         payload.setPerNodeLimit(Integer.valueOf(options.perNodeLimit));
         payload.setTraceId(options.traceId);
-        payload.setVisitedNodeCodes(removeValue(anchor.visitedNodeCodes, anchor.anchorNodeCode));
-        payload.setVisitedUrls(removeValue(anchor.visitedUrls, anchor.anchorDrirpUrl));
+        // Anchor locate path should not constrain subtree search. Otherwise, when a child node
+        // initiates a search anchored at its parent, the parent treats that child as already
+        // visited and skips searching back into the child's subtree.
+        payload.setVisitedNodeCodes(new ArrayList<String>());
+        payload.setVisitedUrls(new ArrayList<String>());
 
         DrirpMessage response = sendForward(anchor.anchorDrirpUrl, null, payload);
         if (response == null) {
@@ -499,8 +506,8 @@ public class DistributedSearchSupport {
     ) {
         SearchAggregationResult out = new SearchAggregationResult();
         out.ok = true;
-        out.visitedNodeCodes = removeValue(anchor.visitedNodeCodes, anchor.anchorNodeCode);
-        out.visitedUrls = removeValue(anchor.visitedUrls, anchor.anchorDrirpUrl);
+        out.visitedNodeCodes = new ArrayList<String>();
+        out.visitedUrls = new ArrayList<String>();
 
         List<QueueEntry> queue = new ArrayList<QueueEntry>();
         LinkedHashSet<String> scheduledUrls = new LinkedHashSet<String>();
@@ -701,14 +708,16 @@ public class DistributedSearchSupport {
             int limit,
             String traceId
     ) {
-        List<SearchResult> merged = mergeByRrf(aggregation.hits);
-        SearchResultSupport.assignDisplayRanks(merged, 1);
         int safeOffset = Math.max(0, offset);
         int safeLimit = Math.max(1, limit);
-        int from = Math.min(safeOffset, merged.size());
-        int to = Math.min(from + safeLimit, merged.size());
+        int required = safeOffset + safeLimit;
+        List<SearchResult> merged = mergeByBestLocalScore(aggregation.hits);
+        List<SearchResult> pruned = pruneMergedResults(merged, required);
+        SearchResultSupport.assignDisplayRanks(pruned, 1);
+        int from = Math.min(safeOffset, pruned.size());
+        int to = Math.min(from + safeLimit, pruned.size());
         GlobalSearchResponse out = new GlobalSearchResponse();
-        out.setItems(new ArrayList<SearchResult>(merged.subList(from, to)));
+        out.setItems(new ArrayList<SearchResult>(pruned.subList(from, to)));
         out.setPartial(aggregation.partial);
         out.setAnchorNodeCode(anchorNodeCode);
         out.setVisitedNodeCodes(aggregation.visitedNodeCodes);
@@ -717,48 +726,38 @@ public class DistributedSearchSupport {
         return out;
     }
 
-    private List<SearchResult> mergeByRrf(List<SearchResult> hits) {
+    private List<SearchResult> mergeByBestLocalScore(List<SearchResult> hits) {
         if (hits == null || hits.isEmpty()) {
             return new ArrayList<SearchResult>();
         }
 
-        LinkedHashMap<String, List<SearchResult>> grouped = groupHitsBySource(hits);
-        if (grouped.size() <= 1) {
-            return mergeSingleSourceHits(hits);
-        }
-
         LinkedHashMap<String, RankAccumulator> merged = new LinkedHashMap<String, RankAccumulator>();
-        for (List<SearchResult> sourceHits : grouped.values()) {
-            sourceHits.sort(new Comparator<SearchResult>() {
-                @Override
-                public int compare(SearchResult a, SearchResult b) {
-                    return compareByNodeScoreDesc(a, b);
-                }
-            });
-            for (int i = 0; i < sourceHits.size(); i++) {
-                SearchResult hit = sourceHits.get(i);
-                if (hit == null || isBlank(hit.getIdentifier())) {
-                    continue;
-                }
-                String id = trim(hit.getIdentifier());
-                RankAccumulator acc = merged.get(id);
-                if (acc == null) {
-                    acc = new RankAccumulator(copyResult(hit));
-                    merged.put(id, acc);
-                } else {
-                    mergeRepresentative(acc, hit);
-                }
-                acc.rrfScore += 1.0 / (RRF_K + i + 1);
-                double localScore = safeScore(hit.getLocalScore());
-                if (localScore <= 0.0) {
-                    localScore = safeScore(hit.getFinalScore());
-                }
-                acc.bestLocalScore = Math.max(acc.bestLocalScore, localScore);
-                acc.bestOriginalFinalScore = Math.max(acc.bestOriginalFinalScore, safeScore(hit.getFinalScore()));
-                acc.bestKeywordScore = Math.max(acc.bestKeywordScore, safeScore(hit.getKeywordScore()));
-                acc.bestSemanticScore = Math.max(acc.bestSemanticScore, safeScore(hit.getSemanticScore()));
-                acc.sources.add(normalizeSource(hit.getSource()));
+        for (SearchResult hit : hits) {
+            if (hit == null || isBlank(hit.getIdentifier())) {
+                continue;
             }
+            String id = trim(hit.getIdentifier());
+            RankAccumulator acc = merged.get(id);
+            if (acc == null) {
+                acc = new RankAccumulator(copyResult(hit));
+                merged.put(id, acc);
+            } else {
+                mergeRepresentative(acc, hit);
+            }
+            double nodeFinalScore = safeScore(hit.getFinalScore());
+            double localScore = safeScore(hit.getLocalScore());
+            if (nodeFinalScore <= 0.0) {
+                nodeFinalScore = localScore;
+            }
+            if (localScore <= 0.0) {
+                localScore = nodeFinalScore;
+            }
+            acc.bestNodeFinalScore = Math.max(acc.bestNodeFinalScore, nodeFinalScore);
+            acc.bestLocalScore = Math.max(acc.bestLocalScore, localScore);
+            acc.bestOriginalFinalScore = Math.max(acc.bestOriginalFinalScore, nodeFinalScore);
+            acc.bestKeywordScore = Math.max(acc.bestKeywordScore, safeScore(hit.getKeywordScore()));
+            acc.bestSemanticScore = Math.max(acc.bestSemanticScore, safeScore(hit.getSemanticScore()));
+            acc.sources.add(normalizeSource(hit.getSource()));
         }
 
         List<SearchResult> out = new ArrayList<SearchResult>();
@@ -766,8 +765,8 @@ public class DistributedSearchSupport {
             acc.result.setKeywordScore(acc.bestKeywordScore);
             acc.result.setSemanticScore(acc.bestSemanticScore);
             acc.result.setLocalScore(acc.bestLocalScore);
-            acc.result.setFusionScore(acc.rrfScore);
-            acc.result.setFinalScore(acc.rrfScore);
+            acc.result.setFusionScore(computeDuplicateBoost(acc));
+            acc.result.setFinalScore(computeGlobalScore(acc));
             out.add(acc.result);
         }
         out.sort(new Comparator<SearchResult>() {
@@ -801,61 +800,6 @@ public class DistributedSearchSupport {
         return out;
     }
 
-    private LinkedHashMap<String, List<SearchResult>> groupHitsBySource(List<SearchResult> hits) {
-        LinkedHashMap<String, List<SearchResult>> grouped = new LinkedHashMap<String, List<SearchResult>>();
-        for (SearchResult hit : hits) {
-            if (hit == null || isBlank(hit.getIdentifier())) {
-                continue;
-            }
-            String source = normalizeSource(hit.getSource());
-            List<SearchResult> list = grouped.get(source);
-            if (list == null) {
-                list = new ArrayList<SearchResult>();
-                grouped.put(source, list);
-            }
-            list.add(copyResult(hit));
-        }
-        return grouped;
-    }
-
-    private List<SearchResult> mergeSingleSourceHits(List<SearchResult> hits) {
-        List<SearchResult> ordered = new ArrayList<SearchResult>();
-        if (hits == null || hits.isEmpty()) {
-            return ordered;
-        }
-        LinkedHashMap<String, SearchResult> deduped = new LinkedHashMap<String, SearchResult>();
-        for (SearchResult hit : hits) {
-            if (hit == null || isBlank(hit.getIdentifier())) {
-                continue;
-            }
-            SearchResult existing = deduped.get(trim(hit.getIdentifier()));
-            if (existing == null) {
-                deduped.put(trim(hit.getIdentifier()), copyResult(hit));
-                continue;
-            }
-            if (compareByNodeScoreDesc(hit, existing) < 0) {
-                SearchResult promoted = copyResult(hit);
-                fillMissing(promoted, existing);
-                deduped.put(trim(hit.getIdentifier()), promoted);
-            } else {
-                fillMissing(existing, hit);
-                existing.setKeywordScore(Math.max(existing.getKeywordScore(), hit.getKeywordScore()));
-                existing.setSemanticScore(Math.max(existing.getSemanticScore(), hit.getSemanticScore()));
-                existing.setLocalScore(Math.max(existing.getLocalScore(), hit.getLocalScore()));
-                existing.setFusionScore(Math.max(existing.getFusionScore(), hit.getFusionScore()));
-                existing.setFinalScore(Math.max(existing.getFinalScore(), hit.getFinalScore()));
-            }
-        }
-        ordered.addAll(deduped.values());
-        ordered.sort(new Comparator<SearchResult>() {
-            @Override
-            public int compare(SearchResult a, SearchResult b) {
-                return compareByNodeScoreDesc(a, b);
-            }
-        });
-        return ordered;
-    }
-
     private void mergeRepresentative(RankAccumulator acc, SearchResult candidate) {
         if (acc == null || candidate == null) {
             return;
@@ -873,6 +817,38 @@ public class DistributedSearchSupport {
         return SearchResultSupport.compareByScoreDesc(a, b);
     }
 
+    private List<SearchResult> pruneMergedResults(List<SearchResult> merged, int required) {
+        List<SearchResult> out = new ArrayList<SearchResult>();
+        if (merged == null || merged.isEmpty()) {
+            return out;
+        }
+        int safeRequired = Math.max(1, required);
+        double topScore = safeScore(merged.get(0).getFinalScore());
+        double minAllowed = Math.max(GLOBAL_MIN_RETURN_SCORE, topScore * GLOBAL_TOP_SCORE_RATIO);
+        double previousScore = -1.0;
+        for (SearchResult result : merged) {
+            if (result == null) {
+                continue;
+            }
+            double score = safeScore(result.getFinalScore());
+            if (score < minAllowed) {
+                break;
+            }
+            if (previousScore > 0.0 && (score / previousScore) < GLOBAL_CLIFF_RATIO) {
+                break;
+            }
+            out.add(result);
+            previousScore = score;
+            if (out.size() >= safeRequired) {
+                break;
+            }
+        }
+        if (out.isEmpty() && !merged.isEmpty()) {
+            out.add(merged.get(0));
+        }
+        return out;
+    }
+
     private String normalizeSource(String source) {
         return isBlank(source) ? "local" : trim(source);
     }
@@ -887,6 +863,21 @@ public class DistributedSearchSupport {
 
     private double bestOriginalScore(RankAccumulator acc) {
         return acc == null ? 0.0 : acc.bestOriginalFinalScore;
+    }
+
+    private double computeGlobalScore(RankAccumulator acc) {
+        if (acc == null) {
+            return 0.0;
+        }
+        return acc.bestNodeFinalScore + computeDuplicateBoost(acc);
+    }
+
+    private double computeDuplicateBoost(RankAccumulator acc) {
+        if (acc == null) {
+            return 0.0;
+        }
+        int duplicateCount = Math.max(0, sourceCount(acc) - 1);
+        return Math.min(GLOBAL_DUPLICATE_BOOST_CAP, duplicateCount * GLOBAL_DUPLICATE_BOOST_STEP);
     }
 
     private SearchRequest buildPerNodeSearchRequest(SearchRequest base, int perNodeLimit) {
@@ -1297,7 +1288,7 @@ public class DistributedSearchSupport {
 
     private static final class RankAccumulator {
         private SearchResult result;
-        private double rrfScore = 0.0;
+        private double bestNodeFinalScore = 0.0;
         private double bestOriginalFinalScore = 0.0;
         private double bestKeywordScore = 0.0;
         private double bestSemanticScore = 0.0;
@@ -1394,6 +1385,3 @@ public class DistributedSearchSupport {
         }
     }
 }
-
-
-

@@ -18,6 +18,12 @@ public class SearchDocumentRow {
     private String contentType;
     private String format;
     private String locator;
+    private String additionalAttributesText;
+    private String theme;
+    private String region;
+    private String nodeTarget;
+    private String sourceFilename;
+    private String bizKeywordsText;
     private double score;
 
     public String getIdentifier() {
@@ -154,6 +160,54 @@ public class SearchDocumentRow {
 
     public void setLocator(String locator) {
         this.locator = locator;
+    }
+
+    public String getAdditionalAttributesText() {
+        return additionalAttributesText;
+    }
+
+    public void setAdditionalAttributesText(String additionalAttributesText) {
+        this.additionalAttributesText = additionalAttributesText;
+    }
+
+    public String getTheme() {
+        return theme;
+    }
+
+    public void setTheme(String theme) {
+        this.theme = theme;
+    }
+
+    public String getRegion() {
+        return region;
+    }
+
+    public void setRegion(String region) {
+        this.region = region;
+    }
+
+    public String getNodeTarget() {
+        return nodeTarget;
+    }
+
+    public void setNodeTarget(String nodeTarget) {
+        this.nodeTarget = nodeTarget;
+    }
+
+    public String getSourceFilename() {
+        return sourceFilename;
+    }
+
+    public void setSourceFilename(String sourceFilename) {
+        this.sourceFilename = sourceFilename;
+    }
+
+    public String getBizKeywordsText() {
+        return bizKeywordsText;
+    }
+
+    public void setBizKeywordsText(String bizKeywordsText) {
+        this.bizKeywordsText = bizKeywordsText;
     }
 
     public double getScore() {

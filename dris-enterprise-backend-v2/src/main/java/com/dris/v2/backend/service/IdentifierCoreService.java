@@ -25,17 +25,20 @@ public class IdentifierCoreService {
     private final DrirpResolutionService drirpResolutionService;
     private final IdentifierPermissionService identifierPermissionService;
     private final IdentifierBusinessAuditService identifierBusinessAuditService;
+    private final KeywordSearchIndexSyncService keywordSearchIndexSyncService;
 
     public IdentifierCoreService(
             LocalDrisKernelFacade localDrisKernelFacade,
             DrirpResolutionService drirpResolutionService,
             IdentifierPermissionService identifierPermissionService,
-            IdentifierBusinessAuditService identifierBusinessAuditService
+            IdentifierBusinessAuditService identifierBusinessAuditService,
+            KeywordSearchIndexSyncService keywordSearchIndexSyncService
     ) {
         this.localDrisKernelFacade = localDrisKernelFacade;
         this.drirpResolutionService = drirpResolutionService;
         this.identifierPermissionService = identifierPermissionService;
         this.identifierBusinessAuditService = identifierBusinessAuditService;
+        this.keywordSearchIndexSyncService = keywordSearchIndexSyncService;
     }
 
     public DrisResponse<String> register(RegistrationRequest request) {
@@ -48,6 +51,7 @@ public class IdentifierCoreService {
             DrisResponse<String> response = BackendKernelResponseSupport.success(identifier);
             if (!identifier.isEmpty()) {
                 identifierPermissionService.bindCreatorAfterRegister(identifier);
+                keywordSearchIndexSyncService.syncUpsertQuietly(identifier);
                 recordAudit(identifier, IdentifierAuditOperations.REGISTER, response);
             }
             return response;
@@ -70,6 +74,7 @@ public class IdentifierCoreService {
             if (!identifier.isEmpty()) {
                 identifierPermissionService.bindCreatorAfterRegister(identifier);
                 metadata = readMetadataQuietly(identifier);
+                keywordSearchIndexSyncService.syncUpsertQuietly(identifier);
             }
             DrisResponse<IdentifierRegistrationView> response = BackendKernelResponseSupport.success(
                     IdentifierRegistrationView.from(identifier, metadata)
@@ -102,6 +107,7 @@ public class IdentifierCoreService {
             identifiers = localDrisKernelFacade.registerBatch(requests);
             DrisResponse<List<String>> response = BackendKernelResponseSupport.success(identifiers);
             identifierPermissionService.bindCreatorAfterRegisterBatch(identifiers);
+            keywordSearchIndexSyncService.syncUpsertQuietly(identifiers);
             if (identifiers != null) {
                 for (String identifier : identifiers) {
                     if (!isBlank(identifier)) {
@@ -192,6 +198,7 @@ public class IdentifierCoreService {
                 throw new BusinessException("VALIDATION_ERROR", "path identifier must equal metadata.identifier", HttpStatus.BAD_REQUEST);
             }
             DrisResponse<Boolean> response = BackendKernelResponseSupport.success(Boolean.valueOf(localDrisKernelFacade.updateMetadata(trimmed, metadata)));
+            keywordSearchIndexSyncService.syncUpsertQuietly(trimmed);
             recordAudit(trimmed, IdentifierAuditOperations.UPDATE_METADATA, response);
             return response;
         } catch (RuntimeException ex) {
@@ -211,6 +218,7 @@ public class IdentifierCoreService {
         try {
             identifierPermissionService.assertCurrentUserCanWriteIdentifier(trimmed);
             DrisResponse<Boolean> response = BackendKernelResponseSupport.success(Boolean.valueOf(localDrisKernelFacade.patchMetadata(trimmed, fields)));
+            keywordSearchIndexSyncService.syncUpsertQuietly(trimmed);
             recordAudit(trimmed, IdentifierAuditOperations.PARTIAL_UPDATE_METADATA, response);
             return response;
         } catch (RuntimeException ex) {
@@ -236,6 +244,7 @@ public class IdentifierCoreService {
             Map<String, String> fields = new LinkedHashMap<String, String>();
             fields.put("status", normalizedStatus);
             DrisResponse<Boolean> response = BackendKernelResponseSupport.success(Boolean.valueOf(localDrisKernelFacade.patchMetadata(trimmed, fields)));
+            keywordSearchIndexSyncService.syncUpsertQuietly(trimmed);
             recordAudit(trimmed, IdentifierAuditOperations.UPDATE_STATUS, response);
             return response;
         } catch (RuntimeException ex) {
@@ -252,6 +261,7 @@ public class IdentifierCoreService {
         try {
             identifierPermissionService.assertCurrentUserCanWriteIdentifier(trimmed);
             DrisResponse<Boolean> response = BackendKernelResponseSupport.success(Boolean.valueOf(localDrisKernelFacade.deleteIdentifier(trimmed)));
+            keywordSearchIndexSyncService.syncDeleteQuietly(trimmed);
             recordAudit(trimmed, IdentifierAuditOperations.DELETE_IDENTIFIER, response);
             return response;
         } catch (RuntimeException ex) {
